@@ -1,3 +1,8 @@
+## Author
+
+Abhinav Singh
+
+
 # Detect non-UTF8 Characters in Oracle
 
 Please follow the below mentioned steps to accurately detect the non-UTF8 Characters in your Oracle tables:
@@ -58,17 +63,5 @@ SELECT VALUE FROM V$NLS_PARAMETERS WHERE PARAMETER IN ('NLS_CHARACTERSET', 'NLS_
 
 [erd2]: https://github.com/fdrgiit/LibraryMgmtSys/blob/master/Images/ora3.PNG "columns"
 
-## Author
 
-Abhinav Singh
 
-/***********************************************************************************************
- Copyright [2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
-
- Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance with the License. A copy of the License is located at
-
-    http://aws.amazon.com/apache2.0/
-
- or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
-
-***********************************************************************************************/
