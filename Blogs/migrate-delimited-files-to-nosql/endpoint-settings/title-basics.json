@@ -1,0 +1,60 @@
+{
+  "TableCount": "1",
+  "Tables": [
+    {
+      "TableName": "title_basics",
+      "TablePath": "title_basics/",
+      "TableOwner": "imdb",
+      "TableColumnsTotal": "9",
+      "TableColumns": [
+        {
+          "ColumnName": "title_const",
+          "ColumnType": "STRING",
+          "ColumnLength": "20",
+          "ColumnNullable": "false",
+          "ColumnIsPk": "true"
+        },
+        {
+          "ColumnName": "title_type",
+          "ColumnType": "STRING",
+          "ColumnLength": "10"
+        },
+        {
+          "ColumnName": "primary_title",
+          "ColumnType": "STRING",
+          "ColumnLength": "255"
+        },
+        {
+          "ColumnName": "original_title",
+          "ColumnType": "STRING",
+          "ColumnLength": "255"
+        },
+        {
+          "ColumnName": "is_adult",
+          "ColumnType": "STRING",
+          "ColumnLength": "10"
+        },
+        {
+          "ColumnName": "start_year",
+          "ColumnType": "STRING",
+          "ColumnLength": "10"
+        },
+        {
+          "ColumnName": "end_year",
+          "ColumnType": "STRING",
+          "ColumnLength": "10"
+        },
+        {
+          "ColumnName": "runtime_mins",
+          "ColumnType": "STRING",
+          "ColumnLength": "20"
+        },
+        {
+          "ColumnName": "genres",
+          "ColumnType": "STRING",
+          "ColumnLength": "255"
+        }
+      ]
+    }
+  ]
+}
