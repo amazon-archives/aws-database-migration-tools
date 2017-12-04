@@ -1,5 +1,6 @@
 # Blog code samples
 Blog: Migrate delimited files from S3 to DynamoDB NoSQL table using Database Migration Services (DMS) and CloudFormation. 
+Link to blog: https://aws.amazon.com/blogs/database/migrate-delimited-files-from-amazon-s3-to-an-amazon-dynamodb-nosql-table-using-aws-database-migration-service-and-aws-cloudformation/
 
 Use Amazon S3 as a source and push a file with 4 million rows of data into Amazon DynamoDB using AWS DMS. Use CloudFormation to create all of the resources, and initiate the task.
 ### Sample shell script
