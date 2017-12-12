@@ -1,0 +1,817 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description:
+  "Stack to Move data from S3 to PostgreSQL"
+Parameters:
+  ClassB:
+    Description: 'Class B of VPC (10.XXX.0.0/16)'
+    Type: Number
+    Default: 0
+    ConstraintDescription: 'Must be in the range [0-255]'
+    MinValue: 0
+    MaxValue: 255
+  CodeBucket:
+    Type: String
+    Description: Specify the Bucket where you have stored the DBScript.zip file.
+    Default: "ganesraj-blogs"
+  CodePrefix:
+    Type: String
+    Description: Specify the key prefix, if it is under the Bucket than leave it null.
+    Default: ""
+  DBName:
+    Default: MyDatabase
+    Description: The database name
+    Type: String
+    MinLength: '1'
+    MaxLength: '64'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+  DBUsername:
+    Default: root
+    NoEcho: 'true'
+    Description: The database admin account username
+    Type: String
+    MinLength: '1'
+    MaxLength: '16'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+  DBPassword:
+    Default: root1234
+    NoEcho: 'true'
+    Description: The database admin account password
+    Type: String
+    MinLength: '1'
+    MaxLength: '41'
+    AllowedPattern: '[a-zA-Z0-9]*'
+    ConstraintDescription: must contain only alphanumeric characters.
+  DBClass:
+    Default: db.r4.large
+    Description: Database instance class
+    Type: String
+    AllowedValues:
+      - db.r4.large
+      - db.r4.xlarge
+      - db.r4.2xlarge
+      - db.r4.4xlarge
+      - db.r4.8xlarge
+      - db.r4.16xlarge
+    ConstraintDescription: must select a valid database instance type.
+  BucketName:
+    Type: String
+    Description: "S3 BucketName"
+    Default: ganesraj-atom-bucket
+Resources:
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Sub '10.${ClassB}.0.0/16'
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+      - Key: Name
+        Value: !Sub '10.${ClassB}.0.0/16'
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Sub '10.${ClassB}.0.0/16'
+  VPCGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+  SubnetAPublic:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !Sub '10.${ClassB}.0.0/20'
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'A public'
+      - Key: Reach
+        Value: public
+  SubnetAPrivate:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !Sub '10.${ClassB}.16.0/20'
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'A private'
+      - Key: Reach
+        Value: private
+  SubnetBPublic:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: !Sub '10.${ClassB}.32.0/20'
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'B public'
+      - Key: Reach
+        Value: public
+  SubnetBPrivate:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: !Sub '10.${ClassB}.48.0/20'
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'B private'
+      - Key: Reach
+        Value: private
+  SubnetCPublic:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [2, !GetAZs '']
+      CidrBlock: !Sub '10.${ClassB}.64.0/20'
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'C public'
+      - Key: Reach
+        Value: public
+  SubnetCPrivate:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [2, !GetAZs '']
+      CidrBlock: !Sub '10.${ClassB}.80.0/20'
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'C private'
+      - Key: Reach
+        Value: private
+  EIP:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: vpc
+  NatGateway:
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      AllocationId: !GetAtt 'EIP.AllocationId'
+      SubnetId:
+        !Ref SubnetAPublic
+  RouteAPrivate:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        !Ref RouteTableAPrivate
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref NatGateway
+  RouteBPrivate:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        !Ref RouteTableBPrivate
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref NatGateway
+  RouteCPrivate:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        !Ref RouteTableCPrivate
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref NatGateway
+  RouteTableAPublic: # should be RouteTableAPublic, but logical id was not changed for backward compatibility
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: Public
+  RouteTableAPrivate: # should be RouteTableAPrivate, but logical id was not changed for backward compatibility
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: Private
+  RouteTableBPublic:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'B Public'
+  RouteTableBPrivate:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'B Private'
+  RouteTableCPublic:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'C Public'
+  RouteTableCPrivate:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'C Private'
+  RouteTableAssociationAPublic:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubnetAPublic
+      RouteTableId: !Ref RouteTableAPublic
+  RouteTableAssociationAPrivate:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubnetAPrivate
+      RouteTableId: !Ref RouteTableAPrivate
+  RouteTableAssociationBPublic:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubnetBPublic
+      RouteTableId: !Ref RouteTableBPublic
+  RouteTableAssociationBPrivate:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubnetBPrivate
+      RouteTableId: !Ref RouteTableBPrivate
+  RouteTableAssociationCPublic:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubnetCPublic
+      RouteTableId: !Ref RouteTableCPublic
+  RouteTableAssociationCPrivate:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubnetCPrivate
+      RouteTableId: !Ref RouteTableCPrivate
+  RouteTableAPublicInternetRoute: # should be RouteTableAPublicAInternetRoute, but logical id was not changed for backward compatibility
+    Type: 'AWS::EC2::Route'
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref RouteTableAPublic
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref InternetGateway
+  RouteTableAPublicBInternetRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref RouteTableBPublic
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref InternetGateway
+  RouteTableAPublicCInternetRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref RouteTableCPublic
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref InternetGateway
+  NetworkAclPublic:
+    Type: 'AWS::EC2::NetworkAcl'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: Public
+  NetworkAclPrivate:
+    Type: 'AWS::EC2::NetworkAcl'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: Private
+  SubnetNetworkAclAssociationAPublic:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref SubnetAPublic
+      NetworkAclId: !Ref NetworkAclPublic
+  SubnetNetworkAclAssociationAPrivate:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref SubnetAPrivate
+      NetworkAclId: !Ref NetworkAclPrivate
+  SubnetNetworkAclAssociationBPublic:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref SubnetBPublic
+      NetworkAclId: !Ref NetworkAclPublic
+  SubnetNetworkAclAssociationBPrivate:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref SubnetBPrivate
+      NetworkAclId: !Ref NetworkAclPrivate
+  SubnetNetworkAclAssociationCPublic:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref SubnetCPublic
+      NetworkAclId: !Ref NetworkAclPublic
+  SubnetNetworkAclAssociationCPrivate:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref SubnetCPrivate
+      NetworkAclId: !Ref NetworkAclPrivate
+  NetworkAclEntryInPublicAllowAll:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAclPublic
+      RuleNumber: 99
+      Protocol: -1
+      RuleAction: allow
+      Egress: false
+      CidrBlock: '0.0.0.0/0'
+  NetworkAclEntryOutPublicAllowAll:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAclPublic
+      RuleNumber: 99
+      Protocol: -1
+      RuleAction: allow
+      Egress: true
+      CidrBlock: '0.0.0.0/0'
+  NetworkAclEntryInPrivateAllowVPC:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAclPrivate
+      RuleNumber: 99
+      Protocol: -1
+      RuleAction: allow
+      Egress: false
+      CidrBlock: '0.0.0.0/0'
+  NetworkAclEntryOutPrivateAllowVPC:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAclPrivate
+      RuleNumber: 99
+      Protocol: -1
+      RuleAction: allow
+      Egress: true
+      CidrBlock: '0.0.0.0/0'
+  MyDBSubnetGroup:
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      DBSubnetGroupDescription: Subnets available for the RDS DB Instance
+      SubnetIds:
+        - !Ref SubnetAPrivate
+        - !Ref SubnetBPrivate
+        - !Ref SubnetCPrivate
+  myVPCSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Security group for RDS DB Instance.
+      SecurityGroupIngress:
+        FromPort: 0     # optional
+        IpProtocol: "TCP"     # required
+        SourceSecurityGroupId: !GetAtt myLambdaSecurityGroup.GroupId    # optional
+        ToPort: 65535     # optional
+      VpcId:
+        Ref: VPC
+  myLambdaSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Security group for Lambda Function.
+      VpcId:
+        Ref: VPC
+  RDSDBParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Description: CloudFormation Sample Parameter Group
+      Family: aurora-postgresql9.6
+  RDSDBClusterParameterGroup:
+    Type: "AWS::RDS::DBClusterParameterGroup"
+    Properties:
+      Parameters:
+        autovacuum_analyze_scale_factor: "0.05"
+      Family: "aurora-postgresql9.6"
+      Description: "A sample parameter group"
+  DatabaseCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+        Engine: aurora-postgresql
+        DatabaseName: "firehosedb"
+        DBClusterParameterGroupName: !Ref "RDSDBClusterParameterGroup"
+        MasterUsername:
+          Ref: DBUsername
+        MasterUserPassword:
+          Ref: DBPassword
+        DBSubnetGroupName:
+          Ref: MyDBSubnetGroup
+        VpcSecurityGroupIds:
+          - !GetAtt "myVPCSecurityGroup.GroupId"
+  MyDB:
+      Type: AWS::RDS::DBInstance
+      Properties:
+          Engine: aurora-postgresql
+          DBParameterGroupName: !Ref "RDSDBParameterGroup"
+          DBClusterIdentifier:
+            Ref: DatabaseCluster
+          DBInstanceClass:
+            Ref: DBClass
+          DBSubnetGroupName:
+            Ref: MyDBSubnetGroup
+  firehosedeliverygroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 3     # optional
+  firehosedeliverystream:
+    Type: AWS::Logs::LogStream
+    Properties:
+      LogGroupName:
+        Ref: "firehosedeliverygroup"     # required
+  KinesisS3Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: firehose.amazonaws.com
+            Action: 'sts:AssumeRole'
+            Condition:
+              StringEquals:
+                'sts:ExternalId':
+                  - Ref: "AWS::AccountId"
+      Policies:
+        -
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:AbortMultipartUpload'
+                  - 's3:GetBucketLocation'
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                  - 's3:ListBucketMultipartUploads'
+                  - 's3:PutObject'
+                Resource:
+                  - '*'
+              - Effect: Allow
+                Action:
+                  - 'logs:PutLogEvents'
+                Resource:
+                  - '*'
+              - Effect: Allow
+                Action:
+                  - 'lambda:InvokeFunction'
+                  - 'lambda:GetFunctionConfiguration'
+                Resource:
+                  - '*'
+          PolicyName: "KinesisS3AccessPolicy"     # required
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:                # optional, list of Policy
+        -
+          PolicyDocument: >
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents",
+                    "ec2:CreateNetworkInterface",
+                    "ec2:DescribeNetworkInterfaces",
+                    "ec2:DeleteNetworkInterface",
+                    "s3:*"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          PolicyName: "LambdaVPCPolicy"     # required
+  DMSS3Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument: >
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "dms.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        }
+      Policies:                # optional, list of Policy
+        -
+          PolicyDocument: >
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                  {
+                      "Effect": "Allow",
+                      "Action": "s3:*",
+                      "Resource": "*"
+                  }
+              ]
+            }
+          PolicyName: "DMSPolicy"     # required
+  BucketPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref ProvideDataToDMS
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref "AWS::AccountId"
+      SourceArn: !Sub "arn:aws:s3:::${BucketName}"
+  SourceBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      NotificationConfiguration:
+        LambdaConfigurations:
+          -
+            Function: !GetAtt "ProvideDataToDMS.Arn"
+            Event: "s3:ObjectCreated:*"
+            Filter:
+              S3Key:
+                Rules:
+                  -
+                    Name: prefix
+                    Value: "processed_records/"
+      Tags:                # optional, list of Tag
+        -
+          Key: UsedBy     # optional
+          Value: "S3 to PostgreSQL Demo CFN"     # optional
+  RunSQLScriptOnRDS:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key:  "DBScript.zip" #!Join  ["", [ "Ref CodePrefix", "DBScript.zip" ]]
+      Description: "Custom Resource to Run a SQL Script"     # optional
+      Handler: "DBScript.lambda_handler"     # required
+      Role:
+        !GetAtt "LambdaExecutionRole.Arn"     # required
+      Runtime: "python2.7"     # required
+      Timeout: 300     # optional
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt "myLambdaSecurityGroup.GroupId"
+        SubnetIds:
+          - !Ref SubnetAPrivate
+          - !Ref SubnetBPrivate
+          - !Ref SubnetCPrivate
+  CustomResource:
+    Type: AWS::CloudFormation::CustomResource
+    DependsOn: MyDB
+    Properties:
+      ServiceToken: !GetAtt "RunSQLScriptOnRDS.Arn"
+      DBEndPoint : !GetAtt "DatabaseCluster.Endpoint.Address"
+      DBPort: !GetAtt "DatabaseCluster.Endpoint.Port"
+      DBName: "firehosedb"
+      DBUserName : !Ref DBUsername
+      DBPassword  : !Ref DBPassword
+  convertTickerDataToCSV:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: "Convert Ticker Data to CSV"
+      Handler: "index.lambda_handler"     # required
+      Role:
+        !GetAtt "LambdaExecutionRole.Arn"     # required
+      Runtime: "python2.7"     # required
+      Timeout: 300     # optional
+      Code:
+        ZipFile: |
+          from __future__ import print_function
+
+          import boto3
+          import base64
+          import json
+          import re
+
+          print('Loading function')
+
+          batch = boto3.client('batch')
+
+
+          def lambda_handler(event, context):
+              output = []
+              succeeded_record_cnt = 0
+              failed_record_cnt = 0
+              for record in event['records']:
+                  print(record['recordId'])
+                  payload = base64.b64decode(record['data'])
+                  #print(payload)
+                  #{"ticker_symbol":"QXZ", "sector":"HEALTHCARE", "change":-0.05, "price":84.51}
+                  p = re.compile(r"^\{\"(\w+)\":(\"\w+\"),\"(\w+)\":(\"\w+\"),\"(\w+)\":(.{0,1}\d*.{0,1}\d*),\"(\w+)\":(\d*.{0,1}\d*)\}")
+                  m = p.match(payload)
+                  fixed_payload = "INSERT,ticker,stock"
+
+                  if m:
+                      succeeded_record_cnt += 1
+                      output_payload = fixed_payload + "," + m.group(2) + ',' + m.group(4) + ',' + m.group(6) + ',' + m.group(8) + '\n'
+                      print(output_payload)
+                      output_record = {
+                          'recordId': record['recordId'],
+                          'result': 'Ok',
+                          'data': base64.b64encode(output_payload)
+                      }
+                  else:
+                      print(payload)
+                      output_payload = ",,,,\n"
+                      print('Parsing failed')
+                      failed_record_cnt += 1
+                      output_record = {
+                          'recordId': record['recordId'],
+                          'result': 'ProcessingFailed',
+                          'data': base64.b64encode(output_payload)
+                      }
+
+                  output.append(output_record)
+
+              print (output)
+
+              print('Processing completed.  Successful records {}, Failed records {}.'.format(succeeded_record_cnt, failed_record_cnt))
+              return {'records': output}
+  ProvideDataToDMS:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: "Transfer the Data to the right S3 key"
+      Handler: "index.lambda_handler"     # required
+      Role:
+        !GetAtt "LambdaExecutionRole.Arn"     # required
+      Runtime: "python2.7"     # required
+      Timeout: 300     # optional
+      Code:
+        ZipFile: |
+          from __future__ import print_function
+
+          import json
+          import urllib
+          import boto3
+          import random
+
+          print('Loading function')
+
+          s3 = boto3.client('s3')
+
+
+          def lambda_handler(event, context):
+              print("Received event: " + json.dumps(event, indent=2))
+
+              # Get the object from the event and show its content type
+              bucket = event['Records'][0]['s3']['bucket']['name']
+              key = urllib.unquote_plus(event['Records'][0]['s3']['object']['key'].encode('utf8'))
+
+              targetBucket = bucket
+              targetKey = "changedata/CDC" + "{:0^6}".format(str(random.randint(1,100000))) + ".csv"
+
+              s3.copy_object(Bucket=targetBucket, CopySource=bucket+"/"+key, Key = targetKey)
+
+              return targetKey
+  TickerDataToS3:
+    Type: AWS::KinesisFirehose::DeliveryStream
+    Properties:
+      ExtendedS3DestinationConfiguration:      # optional
+        BucketARN: !GetAtt "SourceBucket.Arn"     # required
+        BufferingHints:
+          IntervalInSeconds: 60     # required
+          SizeInMBs: 5     # required
+        CloudWatchLoggingOptions:
+          Enabled: "true"     # optional
+          LogGroupName: !Ref "firehosedeliverygroup"     # optional
+          LogStreamName: !Ref "firehosedeliverystream"     # optional
+        CompressionFormat: "UNCOMPRESSED"     # required
+        Prefix: "processed_records/"
+        ProcessingConfiguration:
+          Enabled: 'true'
+          Processors:
+            - Parameters:
+              - ParameterName: LambdaArn
+                ParameterValue: !GetAtt "convertTickerDataToCSV.Arn"
+              Type: Lambda
+        RoleARN: !GetAtt KinesisS3Role.Arn     # required
+        S3BackupConfiguration:
+          BucketARN: !GetAtt SourceBucket.Arn     # required
+          BufferingHints:
+            IntervalInSeconds: 60     # required
+            SizeInMBs: 5     # required
+          CloudWatchLoggingOptions:
+            Enabled: "true"     # optional
+            LogGroupName: !Ref "firehosedeliverygroup"     # optional
+            LogStreamName: !Ref "firehosedeliverystream"     # optional
+          CompressionFormat: "UNCOMPRESSED"     # required
+          Prefix: "source_records/"     # required
+          RoleARN: !GetAtt KinesisS3Role.Arn     # required
+        S3BackupMode: "Enabled"     # optional
+  SourceS3:
+    Type: AWS::DMS::Endpoint
+    Properties:
+      EndpointType: "source"     # required
+      EngineName: "s3"     # required
+      ExtraConnectionAttributes: "cdcPath=changedata/"
+      S3Settings:
+        BucketName: !Ref "SourceBucket"     # optional
+        BucketFolder: "processed_records/"     # optional
+        CsvDelimiter: ","     # optional
+        CsvRowDelimiter: "\n"     # optional
+        ExternalTableDefinition: >
+          {
+            "TableCount": "1",
+            "Tables": [
+              {
+                "TableName": "ticker",
+                "TablePath": "stock/ticker/",
+                "TableOwner": "stock",
+                "TableColumns": [
+                  {
+                    "ColumnName": "ticker_symbol",
+                    "ColumnType": "STRING",
+                    "ColumnNullable": "false",
+                    "ColumnLength": 20,
+                    "ColumnIsPk": "true"
+                  },
+                  {
+                    "ColumnName": "sector",
+                    "ColumnType": "STRING",
+                    "ColumnNullable": "false",
+                    "ColumnLength": "20"
+                  },
+                  {
+                    "ColumnName": "change",
+                    "ColumnType": "REAL8",
+                    "ColumnNullable": "false"
+                  },
+                  {
+                    "ColumnName": "price",
+                    "ColumnNullable": "false",
+                    "ColumnType": "REAL8"
+                  }
+                ],
+                "TableColumnsTotal": "4"
+              }
+            ]
+          }
+        ServiceAccessRoleArn: !GetAtt DMSS3Role.Arn
+  TargetDatabase:
+    Type: AWS::DMS::Endpoint
+    Properties:
+      EngineName: "postgres"
+      EndpointType: "target"
+      Username: !Ref DBUsername
+      Password: !Ref DBPassword
+      ServerName: !GetAtt "MyDB.Endpoint.Address"
+      Port: !GetAtt "MyDB.Endpoint.Port"
+      DatabaseName: !Ref "DBName"
+      Tags:
+        - Key: "type"
+          Value: "db"
+  firehosereplication:
+    Type: AWS::DMS::ReplicationInstance
+    DependsOn: MyDB
+    Properties:
+      ReplicationInstanceClass: "dms.t2.large"     # required
+      ReplicationSubnetGroupIdentifier: !Ref MyDBSubnetGroup
+      VpcSecurityGroupIds:                # optional, list of String
+        - !Ref myVPCSecurityGroup
+  firehosetask:
+    Type: AWS::DMS::ReplicationTask
+    Properties:
+      MigrationType: "full-load-and-cdc"     # required
+      ReplicationInstanceArn: !Ref firehosereplication     # required
+      ReplicationTaskSettings: >
+        {"TargetMetadata":{"TargetSchema":"","SupportLobs":false,"FullLobMode":false,"LobChunkSize":64,"LimitedSizeLobMode":true,"LobMaxSize":32,"LoadMaxFileSize":0,"ParallelLoadThreads":0,"ParallelLoadBufferSize":0,"BatchApplyEnabled":false},"FullLoadSettings":{"TargetTablePrepMode":"DO_NOTHING","CreatePkAfterFullLoad":false,"StopTaskCachedChangesApplied":false,"StopTaskCachedChangesNotApplied":false,"MaxFullLoadSubTasks":8,"TransactionConsistencyTimeout":600,"CommitRate":10000},"Logging":{"EnableLogging":true,"LogComponents":[{"Id":"SOURCE_UNLOAD","Severity":"LOGGER_SEVERITY_DEFAULT"},{"Id":"SOURCE_CAPTURE","Severity":"LOGGER_SEVERITY_DEFAULT"},{"Id":"TARGET_LOAD","Severity":"LOGGER_SEVERITY_DEFAULT"},{"Id":"TARGET_APPLY","Severity":"LOGGER_SEVERITY_DEFAULT"},{"Id":"TASK_MANAGER","Severity":"LOGGER_SEVERITY_DEFAULT"}],"CloudWatchLogGroup":"dms-tasks-firehose-replication","CloudWatchLogStream":"dms-task-S5OABY3KVGN4YRITZX6CCXHDLA"},"ControlTablesSettings":{"historyTimeslotInMinutes":5,"ControlSchema":"","HistoryTimeslotInMinutes":5,"HistoryTableEnabled":false,"SuspendedTablesTableEnabled":false,"StatusTableEnabled":false},"StreamBufferSettings":{"StreamBufferCount":3,"StreamBufferSizeInMB":8,"CtrlStreamBufferSizeInMB":5},"ChangeProcessingDdlHandlingPolicy":{"HandleSourceTableDropped":true,"HandleSourceTableTruncated":true,"HandleSourceTableAltered":true},"ErrorBehavior":{"DataErrorPolicy":"LOG_ERROR","DataTruncationErrorPolicy":"LOG_ERROR","DataErrorEscalationPolicy":"SUSPEND_TABLE","DataErrorEscalationCount":0,"TableErrorPolicy":"SUSPEND_TABLE","TableErrorEscalationPolicy":"STOP_TASK","TableErrorEscalationCount":0,"RecoverableErrorCount":-1,"RecoverableErrorInterval":5,"RecoverableErrorThrottling":true,"RecoverableErrorThrottlingMax":1800,"ApplyErrorDeletePolicy":"IGNORE_RECORD","ApplyErrorInsertPolicy":"LOG_ERROR","ApplyErrorUpdatePolicy":"LOG_ERROR","ApplyErrorEscalationPolicy":"LOG_ERROR","ApplyErrorEscalationCount":0,"ApplyErrorFailOnTruncationDdl":false,"FullLoadIgnoreConflicts":true,"FailOnTransactionConsistencyBreached":false,"FailOnNoTablesCaptured":false},"ChangeProcessingTuning":{"BatchApplyPreserveTransaction":true,"BatchApplyTimeoutMin":1,"BatchApplyTimeoutMax":30,"BatchApplyMemoryLimit":500,"BatchSplitSize":0,"MinTransactionSize":1000,"CommitTimeout":1,"MemoryLimitTotal":1024,"MemoryKeepTime":60,"StatementCacheSize":50}}
+      SourceEndpointArn: !Ref SourceS3     # required
+      TableMappings: >
+        {
+        	"rules": [
+        		{
+        			"rule-type": "selection",
+        			"rule-id": "1",
+        			"rule-name": "1",
+        			"object-locator": {
+        				"schema-name": "%",
+        				"table-name": "%"
+        			},
+        			"rule-action": "include"
+        		}
+        	]
+        }
+      TargetEndpointArn: !Ref TargetDatabase     # required
