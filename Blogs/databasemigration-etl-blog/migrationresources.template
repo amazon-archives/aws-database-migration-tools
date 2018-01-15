@@ -1,0 +1,813 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Parameters": {
+    "S3BucketName": {
+      "AllowedPattern": "[a-z0-9]+",
+      "ConstraintDescription": "must contain only lower case characters and numbers.",
+      "Description": "The S3 Bucket Name. Use numbers and lowercase characters only",
+      "Type": "String"
+    },
+    "KeyName": {
+      "Description": "Name of an existing EC2 Key Pair to enable SSH access to the device simulator EC2 instance",
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "AllowedPattern" : ".+",
+      "ConstraintDescription": "must be the name of an existing EC2 KeyPair."
+    },
+    "VPCCIDR": {
+      "Description": "CIDR Block for the VPC you are creating.",
+      "Type": "String",
+      "Default": "10.0.0.0/16",
+      "AllowedPattern": "[a-zA-Z0-9]+\\..+"
+    },
+    "VPCSUBNET": {
+      "Description": "CIDR Block for the VPC you are creating. This subnet is for Linux instance with Oracle and Amazon Aurora",
+      "Type": "String",
+      "Default": "10.0.0.0/24",
+      "AllowedPattern": "[a-zA-Z0-9]+\\..+"
+    },
+    "VPCSUBNET2": {
+      "Description": "CIDR Block for the VPC you are creating.",
+      "Type": "String",
+      "Default": "10.0.1.0/24",
+      "AllowedPattern": "[a-zA-Z0-9]+\\..+"
+    },
+    "MyIP": {
+      "Description": "IP address of your Machine. Open new browser and use search engine for Whats my IP . Copy IP address and paste it here. ex: x.x.x.x/32",
+      "Type": "String",
+      "Default": "0.0.0.0/0",
+      "AllowedPattern": "[a-zA-Z0-9]+\\..+"
+    },
+    "DMSVPCRoleExists": {
+      "Default": "no",
+      "Description": "Please check IAM whether there is a role called dms-vpc-role already existing in your account (role exsist if you have used AWS DMS in this account previously). If yes then select 'yes' else 'no'",
+      "Type": "String",
+      "AllowedValues": ["yes","no"],
+      "ConstraintDescription": "Must be 'yes' or 'no'"
+    },
+    "AuroraDBUsername": {
+      "Default": "auradmin",
+      "NoEcho": "false",
+      "Description": "Enter database Admin username for RDS Aurora MySQL (default username: auradmin) ",
+      "Type": "String",
+      "MinLength": "4",
+      "MaxLength": "16",
+      "AllowedPattern": "[a-zA-Z][a-zA-Z0-9]*",
+      "ConstraintDescription": "must begin with a letter and contain a minimum of 4 alphanumeric characters."
+    },
+    "AuroraDBPassword": {
+      "Default": "auradmin123",
+      "NoEcho": "true",
+      "Description": "Enter password for Aurora Admin user (default password: auradmin123)",
+      "Type": "String",
+      "MinLength": "8",
+      "MaxLength": "41",
+      "AllowedPattern": "[a-zA-Z0-9]*",
+      "ConstraintDescription": "must contain only alphanumeric characters with minimum of 8 characters."
+    }
+  },
+  "Mappings": {
+    "RegionMap": {
+      "us-east-1": {
+        "32": "ami-de5815a4"
+      },
+      "us-west-1": {
+        "32": "ami-4e95932e"
+      },
+      "us-east-2": {
+        "32": "ami-f6fbd393"
+      },
+      "us-west-2": {
+        "32": "ami-bf66c8c7"
+      }
+    }
+  },
+  "Conditions" : {
+    "DMSVPCRoleExistsCondition" : {
+      "Fn::Equals": [
+        {
+          "Ref": "DMSVPCRoleExists"
+        },
+        "no"
+      ]
+    }
+  },
+  "Resources": {
+    "dmsvpcrole": {
+      "Type": "AWS::IAM::Role",
+      "Condition" : "DMSVPCRoleExistsCondition",
+      "Properties": {
+        "RoleName": "dms-vpc-role",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "dms.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path": "/",
+        "Policies": [
+          {
+            "PolicyName": "root",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                "Effect": "Allow",
+                "Action": [
+                  "ec2:CreateNetworkInterface",
+                  "ec2:DescribeAvailabilityZones",
+                  "ec2:DescribeInternetGateways",
+                  "ec2:DescribeSecurityGroups",
+                  "ec2:DescribeSubnets",
+                  "ec2:DescribeVpcs",
+                  "ec2:DeleteNetworkInterface",
+                  "ec2:ModifyNetworkInterfaceAttribute"
+                ],
+                "Resource": "*"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "S3Bucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": {
+          "Fn::Join": [
+            "-",
+            [
+              "migration",
+              {
+                "Ref": "S3BucketName"
+              }
+            ]
+          ]
+        }
+      }
+    },
+    "BucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "PolicyDocument": {
+          "Id": "MyPolicy",
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "PublicReadWriteForBucketObjects",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "glue.amazonaws.com"
+              },
+              "Action": "s3:*",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:aws:s3:::",
+                    {
+                      "Ref": "S3Bucket"
+                    },
+                    "/*"
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        "Bucket": {
+          "Ref": "S3Bucket"
+        }
+      }
+    },
+    "S3Endpoint": {
+      "Type": "AWS::EC2::VPCEndpoint",
+      "Properties": {
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": "*",
+              "Action": [
+                "s3:*"
+              ],
+              "Resource": "*"
+            }
+          ]
+        },
+        "RouteTableIds": [
+          {
+            "Ref": "PublicRouteTable"
+          }
+        ],
+        "ServiceName": {
+          "Fn::Join": [
+            "",
+            [
+              "com.amazonaws.",
+              {
+                "Ref": "AWS::Region"
+              },
+              ".s3"
+            ]
+          ]
+        },
+        "VpcId": {
+          "Ref": "VPC"
+        }
+      }
+    },
+    "Ec2InstanceSecurityGroupLinux": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Enable SSH access via port 22",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "22",
+            "ToPort": "22",
+            "CidrIp": {
+              "Ref": "MyIP"
+            }
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "80",
+            "ToPort": "80",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "3306",
+            "ToPort": "3306",
+            "CidrIp": {
+              "Ref": "MyIP"
+            }
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "1521",
+            "ToPort": "1521",
+            "CidrIp": {
+              "Ref": "MyIP"
+            }
+          }
+        ],
+        "VpcId": {
+          "Ref": "VPC"
+        }
+      }
+    },
+    "EipAddressLinux": {
+      "Type": "AWS::EC2::EIP",
+      "DependsOn": "Ec2InstanceLinux",
+      "Properties": {
+        "Domain": "vpc",
+        "InstanceId": {
+          "Ref": "Ec2InstanceLinux"
+        }
+      }
+    },
+    "Ec2InstanceLinux": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": {
+          "Fn::FindInMap": [
+            "RegionMap",
+            {
+              "Ref": "AWS::Region"
+            },
+            "32"
+          ]
+        },
+        "KeyName": {
+          "Ref": "KeyName"
+        },
+        "IamInstanceProfile": {
+          "Ref": "EC2InstanceRoleForMigrationProfile"
+        },
+        "InstanceType": "t2.large",
+        "NetworkInterfaces": [
+          {
+            "AssociatePublicIpAddress": "true",
+            "DeviceIndex": "0",
+            "GroupSet": [
+              {
+                "Ref": "Ec2InstanceSecurityGroupLinux"
+              }
+            ],
+            "SubnetId": {
+              "Ref": "PublicSubnet1"
+            }
+          }
+        ],
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/xvda",
+            "Ebs": {
+              "VolumeType": "gp2",
+              "DeleteOnTermination": "false",
+              "VolumeSize": "50"
+            }
+          }
+        ]
+      }
+    },
+    "EC2InstanceRoleForMigration": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "ec2.amazonaws.com",
+                  "rds.amazonaws.com",
+                  "s3.amazonaws.com",
+                  "dms.amazonaws.com",
+                  "glue.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole",
+          "arn:aws:iam::aws:policy/service-role/AmazonDMSVPCManagementRole",
+          "arn:aws:iam::aws:policy/AmazonRDSFullAccess",
+          "arn:aws:iam::aws:policy/AmazonEC2FullAccess",
+          "arn:aws:iam::aws:policy/AmazonS3FullAccess",
+          "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
+        ],
+        "Path": "/"
+      }
+    },
+    "EC2InstanceRoleForMigrationProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Roles": [
+          {
+            "Ref": "EC2InstanceRoleForMigration"
+          }
+        ],
+        "Path": "/"
+      }
+    },
+    "VPC": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": {
+          "Ref": "VPCCIDR"
+        },
+        "EnableDnsSupport": "true",
+        "EnableDnsHostnames": "true"
+      }
+    },
+    "PublicSubnet1": {
+      "Type": "AWS::EC2::Subnet",
+      "DependsOn": "VPC",
+      "Properties": {
+        "CidrBlock": {
+          "Ref": "VPCSUBNET"
+        },
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "AvailabilityZone": {
+          "Fn::Select": [
+            "0",
+            {
+              "Fn::GetAZs": ""
+            }
+          ]
+        }
+      }
+    },
+    "PublicSubnet2": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "CidrBlock": {
+          "Ref": "VPCSUBNET2"
+        },
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "AvailabilityZone": {
+          "Fn::Select": [
+            "1",
+            {
+              "Fn::GetAZs": ""
+            }
+          ]
+        }
+      }
+    },
+    "myInternetGateway": {
+      "Type": "AWS::EC2::InternetGateway"
+    },
+    "AttachGateway": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "InternetGatewayId": {
+          "Ref": "myInternetGateway"
+        }
+      }
+    },
+    "PublicRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        }
+      }
+    },
+    "PublicRoute": {
+      "Type": "AWS::EC2::Route",
+      "DependsOn": "AttachGateway",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Ref": "myInternetGateway"
+        }
+      }
+    },
+    "PublicSubnetRouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "PublicSubnet1"
+        },
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        }
+      }
+    },
+    "PublicSubnetRouteTableAssociation2": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "PublicSubnet2"
+        },
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        }
+      }
+    },
+    "AuroraSecurity": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "DependsOn" : "VPC",
+      "Properties": {
+        "GroupDescription": "create security group for Amazon Aurora",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "3306",
+            "ToPort": "3306",
+            "CidrIp": "10.0.0.0/16"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "3306",
+            "ToPort": "3306",
+            "CidrIp": {
+              "Ref": "MyIP"
+            }
+          }
+        ],
+        "VpcId": {
+          "Ref": "VPC"
+        }
+      }
+    },
+    "AuroraSecurityIngress": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "AuroraSecurity"
+        },
+        "IpProtocol": "tcp",
+        "FromPort": "0",
+        "ToPort": "65535",
+        "SourceSecurityGroupId": {
+          "Ref": "AuroraSecurity"
+        }
+      }
+    },
+    "MyDBSubnetGroup": {
+      "Type": "AWS::RDS::DBSubnetGroup",
+      "Properties": {
+        "DBSubnetGroupDescription": "Subnet available for the DMS Demo RDS DB Instance",
+        "SubnetIds": [
+          {
+            "Ref": "PublicSubnet1"
+          },
+          {
+            "Ref": "PublicSubnet2"
+          }
+        ]
+      }
+    },
+    "AuroraCluster": {
+      "Type": "AWS::RDS::DBCluster",
+      "DeletionPolicy" : "Delete",
+      "Properties": {
+        "AvailabilityZones" : [ {"Fn::GetAtt": [
+          "PublicSubnet1",
+          "AvailabilityZone"
+        ]}, {"Fn::GetAtt": [
+          "PublicSubnet2",
+          "AvailabilityZone"
+        ]} ],
+        "MasterUsername": {
+          "Ref": "AuroraDBUsername"
+        },
+        "MasterUserPassword": {
+          "Ref": "AuroraDBPassword"
+        },
+        "Engine": "aurora",
+        "DBSubnetGroupName": {
+          "Ref": "MyDBSubnetGroup"
+        },
+        "VpcSecurityGroupIds": [
+          {
+            "Ref": "AuroraSecurity"
+          }
+        ]
+      }
+    },
+    "AuroraDB": {
+      "Type": "AWS::RDS::DBInstance",
+      "Properties": {
+        "DBSubnetGroupName": {
+          "Ref": "MyDBSubnetGroup"
+        },
+        "Engine": "aurora",
+        "MultiAZ": "false",
+        "DBClusterIdentifier": {
+          "Ref": "AuroraCluster"
+        },
+        "PubliclyAccessible": "true",
+        "AvailabilityZone": {
+          "Fn::GetAtt": [
+            "PublicSubnet1",
+            "AvailabilityZone"
+          ]
+        },
+        "DBInstanceClass": "db.t2.medium",
+        "Tags": [
+          {
+            "Key": "Application",
+            "Value": {
+              "Ref": "AWS::StackId"
+            }
+          }
+        ]
+      }
+    },
+    "myReplicationSubnetGroup" : {
+         "Type" : "AWS::DMS::ReplicationSubnetGroup",
+         "Properties" : {
+            "ReplicationSubnetGroupIdentifier" : {"Ref": "AWS::StackName"},
+            "ReplicationSubnetGroupDescription" : {"Ref": "AWS::StackName"},
+            "SubnetIds" : [ {"Ref": "PublicSubnet1"}, {"Ref": "PublicSubnet2"} ],
+            "Tags" : [ {"Key" : "key", "Value" : "val"} ]
+         }
+      },
+    "BasicReplicationInstance": {
+      "Type": "AWS::DMS::ReplicationInstance",
+      "DependsOn" : "myReplicationSubnetGroup",
+      "Properties": {
+        "ReplicationInstanceClass": "dms.t2.large",
+        "MultiAZ": "false",
+        "ReplicationSubnetGroupIdentifier": {
+          "Ref": "myReplicationSubnetGroup"
+        },
+        "AvailabilityZone": {
+          "Fn::GetAtt": [
+            "PublicSubnet1",
+            "AvailabilityZone"
+          ]
+        },
+        "VpcSecurityGroupIds" : [
+          {
+            "Ref": "AuroraSecurity"
+          }
+        ],
+        "ReplicationInstanceIdentifier": {
+          "Fn::Join": [
+            "-",
+            [
+              "migration",
+              {
+                "Ref": "AWS::StackName"
+              }
+            ]
+          ]
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "VPCID": {
+      "Description": "VPC Id",
+      "Value": {
+        "Ref": "VPC"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-VPCID"
+        }
+      }
+    },
+    "OracleUsername": {
+      "Description": "Oracle Username",
+      "Value": "HRDATA"
+    },
+    "OraclePassword": {
+      "Description": "Oracle Password",
+      "Value": "hrdata"
+    },
+    "OracleSID": {
+      "Description": "Oracle SID",
+      "Value": "XE"
+    },
+    "OraclePORT": {
+      "Description": "Oracle default PORT",
+      "Value": "1521"
+    },
+    "AuroraMySQLPORT": {
+      "Description": "Amazon Aurora MySQL default PORT",
+      "Value": "3306"
+    },
+    "OracleIpAddress": {
+      "Description": "Public IP of the Oracle database running in Amazon Linux Instance to emulate Oracle on-premise.",
+      "Value": {
+        "Ref": "EipAddressLinux"
+      }
+    },
+    "OracleEndpointName": {
+      "Description": "DNS Endpoint of the Oracle database running in Amazon Linux Instance to emulate Oracle on-premise.",
+      "Value": {
+        "Fn::GetAtt": [
+          "Ec2InstanceLinux",
+          "PublicDnsName"
+        ]
+      }
+    },
+    "IAMEC2InstanceRoleForMigrationName": {
+      "Description": "The IAM role to be associated with the EC2 Instance",
+      "Value": {
+        "Ref": "EC2InstanceRoleForMigration"
+      }
+    },
+    "AuroraSecurityGroupID": {
+      "Description": "Name of RDS Aurora MySQL cluster SecurityGroup ID.",
+      "Value": {
+        "Ref": "AuroraSecurity"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-AuroraSecurityGroupID"
+        }
+      }
+    },
+    "AuroraClusterEndPoint": {
+      "Description": "RDS Aurora MySQL cluster end point",
+      "Value": {
+        "Fn::GetAtt": [
+          "AuroraCluster",
+          "Endpoint.Address"
+        ]
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-AuroraClusterEndPoint"
+        }
+      }
+    },
+    "AuroraClusterUserName": {
+      "Description": "RDS Aurora MySQL cluster username",
+      "Value": {
+        "Ref": "AuroraDBUsername"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-AuroraClusterUserName"
+        }
+      }
+    },
+    "AuroraClusterPassword": {
+      "Description": "RDS Aurora MySQL cluster password",
+      "Value": {
+        "Ref": "AuroraDBPassword"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-AuroraClusterPassword"
+        }
+      }
+    },
+    "AuroraSubnetAZ": {
+      "Description": "RDS Aurora MySQL AvailabilityZone",
+      "Value": {
+        "Fn::GetAtt": [
+          "PublicSubnet1",
+          "AvailabilityZone"
+        ]
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-AuroraSubnetAZ"
+        }
+      }
+    },
+    "AuroraSubnetID": {
+      "Description": "RDS Aurora MySQL AvailabilityZone",
+      "Value": {
+        "Ref": "PublicSubnet1"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-AuroraSubnetID"
+        }
+      }
+    },
+    "AuroraDatabaseName": {
+      "Description": "RDS Aurora MySQL database name",
+      "Value": "HRDATA",
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-AuroraDatabaseName"
+        }
+      }
+    },
+    "AuroraJDBCConnectionString": {
+      "Description": "JDBC connection string for Aurora database",
+      "Value": {
+        "Fn::Join": [
+          "",
+          [
+            "jdbc:mysql://",
+            {
+              "Fn::GetAtt": [
+                "AuroraCluster",
+                "Endpoint.Address"
+              ]
+            },
+            ":",
+            {
+              "Fn::GetAtt": [
+                "AuroraCluster",
+                "Endpoint.Port"
+              ]
+            },
+            "/HRDATA"
+          ]
+        ]
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-AuroraJDBCConnectionString"
+        }
+      }
+    },
+    "DMSReplicationInstance": {
+      "Description": "Name of the replication instance to use in DMS migration",
+      "Value": {
+        "Ref": "BasicReplicationInstance"
+      }
+    },
+    "S3BucketName": {
+      "Description": "Name of S3 bucket",
+      "Value": {
+        "Ref": "S3Bucket"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-S3BucketName"
+        }
+      }
+    }
+  }
+}

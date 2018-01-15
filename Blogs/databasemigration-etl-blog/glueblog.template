@@ -1,0 +1,305 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Parameters": {
+    "MigrationStackName": {
+      "Description": "Please enter the name of the CloudFormation stack that was used to deploy the RDS Aurora MySQL resource.",
+      "Type": "String"
+    },
+    "DatabasePath": {
+      "Description": "Schema Path for crawling the database and table schemas. DBname/% for crawling all the tables in the DB",
+      "Default": "HRDATA/%",
+      "Type": "String"
+    }
+  },
+  "Conditions" : {
+    "UseProdCondition" : {
+      "Fn::Equals": [
+        {
+          "Ref": "AWS::Region"
+        },
+        "us-east-2"
+      ]
+    }
+  },
+  "Resources": {
+    "AWSGlueServiceRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "glue.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path": "/",
+        "Policies": [
+          {
+            "PolicyName": "root",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "glue:*",
+                    "s3:GetBucketLocation",
+                    "s3:ListBucket",
+                    "s3:ListAllMyBuckets",
+                    "s3:GetBucketAcl",
+                    "ec2:DescribeVpcEndpoints",
+                    "ec2:DescribeRouteTables",
+                    "ec2:CreateNetworkInterface",
+                    "ec2:DeleteNetworkInterface",
+                    "ec2:DescribeNetworkInterfaces",
+                    "ec2:DescribeSecurityGroups",
+                    "ec2:DescribeSubnets",
+                    "ec2:DescribeVpcAttribute",
+                    "iam:ListRolePolicies",
+                    "iam:GetRole",
+                    "iam:GetRolePolicy"
+                  ],
+                  "Resource": [
+                    "*"
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:CreateBucket"
+                  ],
+                  "Resource": [
+                    "arn:aws:s3:::aws-glue-*"
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:PutObject",
+                    "s3:DeleteObject"
+                  ],
+                  "Resource": [
+                    "arn:aws:s3:::aws-glue-*/*",
+                    "arn:aws:s3:::*/*aws-glue-*/*"
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject"
+                  ],
+                  "Resource": [
+                    "arn:aws:s3:::crawler-public*",
+                    "arn:aws:s3:::aws-glue-*"
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": [
+                    "arn:aws:logs:*:*:/aws-glue/*"
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                  "ec2:CreateTags",
+                  "ec2:DeleteTags"
+                ],
+                "Condition": {
+                "ForAllValues:StringEquals": {
+                    "aws:TagKeys": [
+                          "aws-glue-service-resource"
+                    ]
+                  }
+                },
+                "Resource": [
+                  "arn:aws:ec2:*:*:network-interface/*",
+                  "arn:aws:ec2:*:*:security-group/*",
+                  "arn:aws:ec2:*:*:instance/*"
+                ]
+              }
+            ]
+            }
+          }
+        ]
+      }
+    },
+    "AWSGluedatabaseRDS": {
+      "Type": "AWS::Glue::Database",
+      "Properties": {
+        "DatabaseInput": {
+          "Name": "hrdb"
+        },
+        "CatalogId": {
+          "Ref": "AWS::AccountId"
+        }
+      }
+    },
+    "AWSGlueconnectionRDS": {
+      "Type": "AWS::Glue::Connection",
+      "Properties": {
+        "CatalogId": {
+          "Ref": "AWS::AccountId"
+        },
+        "ConnectionInput": {
+          "ConnectionType": "JDBC",
+          "ConnectionProperties": {
+            "JDBC_CONNECTION_URL": {
+              "Fn::ImportValue": {
+                "Fn::Sub": "${MigrationStackName}-AuroraJDBCConnectionString"
+              }
+            },
+            "USERNAME": {
+              "Fn::ImportValue": {
+                "Fn::Sub": "${MigrationStackName}-AuroraClusterUserName"
+              }
+            },
+            "PASSWORD": {
+              "Fn::ImportValue": {
+                "Fn::Sub": "${MigrationStackName}-AuroraClusterPassword"
+              }
+            }
+          },
+          "Name": "rds-aurora-blog-conn",
+          "PhysicalConnectionRequirements": {
+            "AvailabilityZone": {
+              "Fn::ImportValue": {
+                "Fn::Sub": "${MigrationStackName}-AuroraSubnetAZ"
+              }
+            },
+            "SecurityGroupIdList": [
+              {
+                "Fn::ImportValue": {
+                  "Fn::Sub": "${MigrationStackName}-AuroraSecurityGroupID"
+                }
+              }
+            ],
+            "SubnetId": {
+              "Fn::ImportValue": {
+                "Fn::Sub": "${MigrationStackName}-AuroraSubnetID"
+              }
+            }
+          }
+        }
+      }
+    },
+    "GlueCrawler": {
+      "Type": "AWS::Glue::Crawler",
+      "Properties": {
+        "Name": "rds-aurora-blog-crawler",
+        "Role": {
+          "Fn::GetAtt": [
+            "AWSGlueServiceRole",
+            "Arn"
+          ]
+        },
+        "Description": "Crawler",
+        "DatabaseName": {
+          "Ref": "AWSGluedatabaseRDS"
+        },
+        "TablePrefix": "glue_",
+        "Targets": {
+          "JdbcTargets": [
+            {
+              "ConnectionName": {
+                "Ref": "AWSGlueconnectionRDS"
+              },
+              "Path": {
+                "Ref": "DatabasePath"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "GlueJob": {
+      "Type": "AWS::Glue::Job",
+      "Properties": {
+        "Role": {
+          "Ref": "AWSGlueServiceRole"
+        },
+        "Connections": {
+          "Connections": [
+            {
+              "Ref": "AWSGlueconnectionRDS"
+            }
+          ]
+        },
+        "Description": "Job created with CloudFormation using existing script",
+        "Command": {
+          "Name": "glueetl",
+
+          "ScriptLocation": {
+            "Fn::If" : [
+              "UseProdCondition",
+              "s3://blog-scripts-glueetl/glueetl/blogetl.py",
+              "s3://blog-scripts-gluetl-west2/glueetl/blogetl.py"
+              ]}
+        },
+        "ExecutionProperty": {
+          "MaxConcurrentRuns": 2
+        },
+        "MaxRetries": 0,
+        "Name": {
+          "Fn::Join": [
+            "-",
+            [
+              {
+                "Ref": "AWS::StackName"
+              },
+              "blog-etljob"
+            ]
+          ]
+        },
+        "AllocatedCapacity": "10"
+      }
+    }
+  },
+  "Outputs": {
+    "gluedbName": {
+      "Value": {
+        "Ref": "AWSGluedatabaseRDS"
+      },
+      "Description": "Name of the database in Glue catalog."
+    },
+    "GlueConnectionName": {
+      "Value": {
+        "Ref": "AWSGlueconnectionRDS"
+      },
+      "Description": "Name of the Aurora MySQL JDBC Connection in Glue."
+    },
+    "GlueCrawlerName": {
+      "Value": {
+        "Ref": "GlueCrawler"
+      },
+      "Description": "Name of the Crawler in Glue."
+    },
+    "GlueJobName": {
+      "Value": {
+        "Ref": "GlueJob"
+      },
+      "Description": "Name of the AWS Glue Job."
+    },
+    "GlueIAMRole": {
+      "Value": {
+        "Ref": "AWSGlueServiceRole"
+      },
+      "Description": "IAM Glue Service Role. This role will be needed during Glue job creation."
+    }
+  }
+}

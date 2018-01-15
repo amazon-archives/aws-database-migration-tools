@@ -1,0 +1,1443 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Parameters": {
+        "S3BucketName": {
+            "AllowedPattern": "[a-z0-9]+",
+            "ConstraintDescription": "must contain only lower case characters and numbers.",
+            "Description": "The S3 Bucket Name. Use numbers and lowercase characters only",
+            "Type": "String"
+        },
+        "KeyName": {
+            "Description": "Name of an existing EC2 Key Pair to enable SSH access to the device simulator EC2 instance",
+            "Type": "AWS::EC2::KeyPair::KeyName",
+            "AllowedPattern": ".+",
+            "ConstraintDescription": "must be the name of an existing EC2 KeyPair."
+        },
+        "VPCCIDR": {
+            "Description": "CIDR Block for the VPC you are creating.",
+            "Type": "String",
+            "Default": "10.0.0.0/16",
+            "AllowedPattern": "[a-zA-Z0-9]+\\..+"
+        },
+        "VPCSubnet1": {
+            "Description": "CIDR Block for the VPC you are creating. This subnet is for Linux instance with Oracle and Amazon Aurora",
+            "Type": "String",
+            "Default": "10.0.0.0/24",
+            "AllowedPattern": "[a-zA-Z0-9]+\\..+"
+        },
+        "VPCSubnet2": {
+            "Description": "CIDR Block for the VPC you are creating.",
+            "Type": "String",
+            "Default": "10.0.1.0/24",
+            "AllowedPattern": "[a-zA-Z0-9]+\\..+"
+        },
+        "MyIP": {
+            "Description": "IP address of your Machine. Open new browser and use search engine for Whats my IP . Copy IP address and paste it here. ex: x.x.x.x/32",
+            "Type": "String",
+            "Default": "0.0.0.0/0",
+            "AllowedPattern": "[a-zA-Z0-9]+\\..+"
+        },
+        "DMSVPCRoleExists": {
+            "Default": "no",
+            "Description": "Please check IAM whether there is a role called dms-vpc-role already existing in your account (role exsist if you have used AWS DMS in this account previously). If yes then select 'yes' else 'no'",
+            "Type": "String",
+            "AllowedValues": [
+                "yes",
+                "no"
+            ],
+            "ConstraintDescription": "Must be 'yes' or 'no'"
+        },
+        "AuroraDBUsername": {
+            "Default": "auradmin",
+            "NoEcho": "false",
+            "Description": "Enter database Admin username for RDS Aurora MySQL (default username: auradmin) ",
+            "Type": "String",
+            "MinLength": "4",
+            "MaxLength": "16",
+            "AllowedPattern": "[a-zA-Z][a-zA-Z0-9]*",
+            "ConstraintDescription": "must begin with a letter and contain a minimum of 4 alphanumeric characters."
+        },
+        "AuroraDBPassword": {
+            "Default": "auradmin123",
+            "NoEcho": "true",
+            "Description": "Enter password for Aurora Admin user (default password: auradmin123)",
+            "Type": "String",
+            "MinLength": "8",
+            "MaxLength": "41",
+            "AllowedPattern": "[a-zA-Z0-9]*",
+            "ConstraintDescription": "must contain only alphanumeric characters with minimum of 8 characters."
+        }
+    },
+    "Mappings": {
+        "RegionMap": {
+            "us-east-1": {
+                "32": "ami-de5815a4"
+            },
+            "us-west-1": {
+                "32": "ami-4e95932e"
+            },
+            "us-east-2": {
+                "32": "ami-f6fbd393"
+            },
+            "us-west-2": {
+                "32": "ami-bf66c8c7"
+            }
+        }
+    },
+    "Conditions": {
+        "DMSVPCRoleExistsCondition": {
+            "Fn::Equals": [
+                {
+                    "Ref": "DMSVPCRoleExists"
+                },
+                "no"
+            ]
+        }
+    },
+    "Resources": {
+        "dmsvpcrole": {
+            "Type": "AWS::IAM::Role",
+            "Condition": "DMSVPCRoleExistsCondition",
+            "Properties": {
+                "RoleName": "dms-vpc-role",
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "dms.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyName": "root",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "ec2:CreateNetworkInterface",
+                                        "ec2:DescribeAvailabilityZones",
+                                        "ec2:DescribeInternetGateways",
+                                        "ec2:DescribeSecurityGroups",
+                                        "ec2:DescribeSubnets",
+                                        "ec2:DescribeVpcs",
+                                        "ec2:DeleteNetworkInterface",
+                                        "ec2:ModifyNetworkInterfaceAttribute"
+                                    ],
+                                    "Resource": "*"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "b41493aa-be9f-445d-ad3d-cfeaf660396c"
+                }
+            }
+        },
+        "S3Bucket": {
+            "Type": "AWS::S3::Bucket",
+            "Properties": {
+                "BucketName": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "migration",
+                            {
+                                "Ref": "S3BucketName"
+                            }
+                        ]
+                    ]
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "be2a1872-05e1-404b-bea1-cab2674c488c"
+                }
+            }
+        },
+        "BucketPolicy": {
+            "Type": "AWS::S3::BucketPolicy",
+            "Properties": {
+                "PolicyDocument": {
+                    "Id": "MyPolicy",
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Sid": "PublicReadWriteForBucketObjects",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "glue.amazonaws.com"
+                            },
+                            "Action": "s3:*",
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:aws:s3:::",
+                                        {
+                                            "Ref": "S3Bucket"
+                                        },
+                                        "/*"
+                                    ]
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "Bucket": {
+                    "Ref": "S3Bucket"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "b4be218c-2282-4ec3-a399-2bfda8fcde28"
+                }
+            }
+        },
+        "S3Endpoint": {
+            "Type": "AWS::EC2::VPCEndpoint",
+            "Properties": {
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": "*",
+                            "Action": [
+                                "s3:*"
+                            ],
+                            "Resource": "*"
+                        }
+                    ]
+                },
+                "RouteTableIds": [
+                    {
+                        "Ref": "PublicRouteTable"
+                    }
+                ],
+                "ServiceName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            "com.amazonaws.",
+                            {
+                                "Ref": "AWS::Region"
+                            },
+                            ".s3"
+                        ]
+                    ]
+                },
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "1abce30d-0a31-460b-9280-000d01129eb5"
+                }
+            }
+        },
+        "Ec2InstanceSecurityGroupLinux": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Enable SSH access via port 22",
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "22",
+                        "ToPort": "22",
+                        "CidrIp": {
+                            "Ref": "MyIP"
+                        }
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "80",
+                        "ToPort": "80",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "3306",
+                        "ToPort": "3306",
+                        "CidrIp": {
+                            "Ref": "MyIP"
+                        }
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "1521",
+                        "ToPort": "1521",
+                        "CidrIp": {
+                            "Ref": "MyIP"
+                        }
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "f2ba4dbe-ef77-436f-99d6-bc335fd062e9"
+                }
+            }
+        },
+        "EipAddressLinux": {
+            "Type": "AWS::EC2::EIP",
+            "DependsOn": "Ec2InstanceLinux",
+            "Properties": {
+                "Domain": "vpc",
+                "InstanceId": {
+                    "Ref": "Ec2InstanceLinux"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "18cb7e57-7dc0-4009-aeaa-e4def2ee8cec"
+                }
+            }
+        },
+        "Ec2InstanceLinux": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "ImageId": {
+                    "Fn::FindInMap": [
+                        "RegionMap",
+                        {
+                            "Ref": "AWS::Region"
+                        },
+                        "32"
+                    ]
+                },
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "IamInstanceProfile": {
+                    "Ref": "EC2InstanceRoleForMigrationProfile"
+                },
+                "InstanceType": "t2.large",
+                "NetworkInterfaces": [
+                    {
+                        "AssociatePublicIpAddress": "true",
+                        "DeviceIndex": "0",
+                        "GroupSet": [
+                            {
+                                "Ref": "Ec2InstanceSecurityGroupLinux"
+                            }
+                        ],
+                        "SubnetId": {
+                            "Ref": "PublicSubnet1"
+                        }
+                    }
+                ],
+                "BlockDeviceMappings": [
+                    {
+                        "DeviceName": "/dev/xvda",
+                        "Ebs": {
+                            "VolumeType": "gp2",
+                            "DeleteOnTermination": "false",
+                            "VolumeSize": "50"
+                        }
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "d8dc4bf7-dc2f-484e-98a8-1be6093f1853"
+                }
+            }
+        },
+        "EC2InstanceRoleForMigration": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "ec2.amazonaws.com",
+                                    "rds.amazonaws.com",
+                                    "s3.amazonaws.com",
+                                    "dms.amazonaws.com",
+                                    "glue.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole",
+                    "arn:aws:iam::aws:policy/service-role/AmazonDMSVPCManagementRole",
+                    "arn:aws:iam::aws:policy/AmazonRDSFullAccess",
+                    "arn:aws:iam::aws:policy/AmazonEC2FullAccess",
+                    "arn:aws:iam::aws:policy/AmazonS3FullAccess",
+                    "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
+                ],
+                "Path": "/"
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "14ad5d1e-e1b6-4f82-b671-8f503c50b318"
+                }
+            }
+        },
+        "EC2InstanceRoleForMigrationProfile": {
+            "Type": "AWS::IAM::InstanceProfile",
+            "Properties": {
+                "Roles": [
+                    {
+                        "Ref": "EC2InstanceRoleForMigration"
+                    }
+                ],
+                "Path": "/"
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "43b78832-085f-4aaf-8193-1e11e9f50f21"
+                }
+            }
+        },
+        "VPC": {
+            "Type": "AWS::EC2::VPC",
+            "Properties": {
+                "CidrBlock": {
+                    "Ref": "VPCCIDR"
+                },
+                "EnableDnsSupport": "true",
+                "EnableDnsHostnames": "true"
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15"
+                }
+            }
+        },
+        "PublicSubnet1": {
+            "Type": "AWS::EC2::Subnet",
+            "DependsOn": "VPC",
+            "Properties": {
+                "CidrBlock": {
+                    "Ref": "VPCSubnet1"
+                },
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "AvailabilityZone": {
+                    "Fn::Select": [
+                        "0",
+                        {
+                            "Fn::GetAZs": ""
+                        }
+                    ]
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "1469d6ec-5a33-4802-ab76-4cd81dab74df"
+                }
+            }
+        },
+        "PublicSubnet2": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "CidrBlock": {
+                    "Ref": "VPCSubnet2"
+                },
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "AvailabilityZone": {
+                    "Fn::Select": [
+                        "1",
+                        {
+                            "Fn::GetAZs": ""
+                        }
+                    ]
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "3cb4ecf9-1fab-48b2-a954-cf8f10babb02"
+                }
+            }
+        },
+        "myInternetGateway": {
+            "Type": "AWS::EC2::InternetGateway",
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "1ad148de-64a4-49ce-a01b-0b988e26a9a9"
+                }
+            }
+        },
+        "AttachGateway": {
+            "Type": "AWS::EC2::VPCGatewayAttachment",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "InternetGatewayId": {
+                    "Ref": "myInternetGateway"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "0bd5fdf7-4dfe-4076-8c5d-4b6e3b03fe0b"
+                }
+            }
+        },
+        "PublicRouteTable": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "f48aa8ff-ba91-47bd-a634-cc89ed0a6cef"
+                }
+            }
+        },
+        "PublicRoute": {
+            "Type": "AWS::EC2::Route",
+            "DependsOn": "AttachGateway",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "GatewayId": {
+                    "Ref": "myInternetGateway"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "cb1c810f-6be0-44ee-8d7e-39cc127c4597"
+                }
+            }
+        },
+        "PublicSubnetRouteTableAssociation": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PublicSubnet1"
+                },
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "3a1b795d-92a7-4877-9385-b2a80b6d3335"
+                }
+            }
+        },
+        "PublicSubnetRouteTableAssociation2": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PublicSubnet2"
+                },
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "6f7672fc-de80-492f-a90f-e19975deeedb"
+                }
+            }
+        },
+        "AuroraSecurity": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "DependsOn": "VPC",
+            "Properties": {
+                "GroupDescription": "create security group for Amazon Aurora",
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "5432",
+                        "ToPort": "5432",
+                        "CidrIp": "10.0.0.0/16"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "5432",
+                        "ToPort": "5432",
+                        "CidrIp": {
+                            "Ref": "MyIP"
+                        }
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "d928a3d7-b52a-48b0-8340-c70c88dafa6c"
+                }
+            }
+        },
+        "AuroraSecurityIngress": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Properties": {
+                "GroupId": {
+                    "Ref": "AuroraSecurity"
+                },
+                "IpProtocol": "tcp",
+                "FromPort": "0",
+                "ToPort": "65535",
+                "SourceSecurityGroupId": {
+                    "Ref": "AuroraSecurity"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "f4eb0c6f-a143-4d2b-bee6-fb7871f6fc33"
+                }
+            }
+        },
+        "MyDBSubnetGroup": {
+            "Type": "AWS::RDS::DBSubnetGroup",
+            "Properties": {
+                "DBSubnetGroupDescription": "Subnet available for the DMS Demo RDS DB Instance",
+                "SubnetIds": [
+                    {
+                        "Ref": "PublicSubnet1"
+                    },
+                    {
+                        "Ref": "PublicSubnet2"
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "96a432c0-08b0-4a1c-8a1a-f8e6660ca9be"
+                }
+            }
+        },
+        "RDSDBClusterParameterGroup": {
+            "Type": "AWS::RDS::DBClusterParameterGroup",
+            "Properties": {
+                "Description": "CloudFormation Aurora PostgreSQL Cluster Parameter Group",
+                "Family": "aurora-postgresql9.6",
+                "Parameters": {
+                    "timezone": "US/Eastern"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "4c2b6143-50a6-46e7-8e3c-0ec6a10caece"
+                }
+            }
+        },
+        "RDSDBParameterGroup": {
+            "Type": "AWS::RDS::DBParameterGroup",
+            "Properties": {
+                "Description": "CloudFormation Sample Aurora Postgresql Instance Parameter Group",
+                "Family": "aurora-postgresql9.6",
+                "Parameters": {
+                    "session_replication_role": "replica"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "4c093ce1-220a-435c-958a-b9077703e858"
+                }
+            }
+        },
+        "AuroraCluster": {
+            "Type": "AWS::RDS::DBCluster",
+            "DeletionPolicy": "Delete",
+            "Properties": {
+                "AvailabilityZones": [
+                    {
+                        "Fn::GetAtt": [
+                            "PublicSubnet1",
+                            "AvailabilityZone"
+                        ]
+                    },
+                    {
+                        "Fn::GetAtt": [
+                            "PublicSubnet2",
+                            "AvailabilityZone"
+                        ]
+                    }
+                ],
+                "MasterUsername": {
+                    "Ref": "AuroraDBUsername"
+                },
+                "MasterUserPassword": {
+                    "Ref": "AuroraDBPassword"
+                },
+                "Engine": "aurora-postgresql",
+                "EngineVersion": "9.6.3",
+                "DBClusterParameterGroupName": {
+                    "Ref": "RDSDBClusterParameterGroup"
+                },
+                "Port": "5432",
+                "DatabaseName": "mydb",
+                "DBSubnetGroupName": {
+                    "Ref": "MyDBSubnetGroup"
+                },
+                "VpcSecurityGroupIds": [
+                    {
+                        "Ref": "AuroraSecurity"
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "4fc2193a-ac1a-4847-b570-6b68837da441"
+                }
+            }
+        },
+        "AuroraDB": {
+            "Type": "AWS::RDS::DBInstance",
+            "Properties": {
+                "DBParameterGroupName": {
+                    "Ref": "RDSDBParameterGroup"
+                },
+                "DBSubnetGroupName": {
+                    "Ref": "MyDBSubnetGroup"
+                },
+                "Engine": "aurora-postgresql",
+                "EngineVersion": "9.6.3",
+                "MultiAZ": "false",
+                "DBClusterIdentifier": {
+                    "Ref": "AuroraCluster"
+                },
+                "PubliclyAccessible": "true",
+                "AvailabilityZone": {
+                    "Fn::GetAtt": [
+                        "PublicSubnet1",
+                        "AvailabilityZone"
+                    ]
+                },
+                "DBInstanceClass": "db.r4.large",
+                "Tags": [
+                    {
+                        "Key": "Application",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "455df1bf-feb2-462c-8f3b-8d789132dcc7"
+                }
+            }
+        },
+        "myReplicationSubnetGroup": {
+            "Type": "AWS::DMS::ReplicationSubnetGroup",
+            "Properties": {
+                "ReplicationSubnetGroupIdentifier": {
+                    "Ref": "AWS::StackName"
+                },
+                "ReplicationSubnetGroupDescription": {
+                    "Ref": "AWS::StackName"
+                },
+                "SubnetIds": [
+                    {
+                        "Ref": "PublicSubnet1"
+                    },
+                    {
+                        "Ref": "PublicSubnet2"
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "key",
+                        "Value": "val"
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "220c0588-2903-4698-bc4d-883ed1138464"
+                }
+            }
+        },
+        "BasicReplicationInstance": {
+            "Type": "AWS::DMS::ReplicationInstance",
+            "DependsOn": "myReplicationSubnetGroup",
+            "Properties": {
+                "ReplicationInstanceClass": "dms.t2.large",
+                "MultiAZ": "false",
+                "ReplicationSubnetGroupIdentifier": {
+                    "Ref": "myReplicationSubnetGroup"
+                },
+                "AvailabilityZone": {
+                    "Fn::GetAtt": [
+                        "PublicSubnet1",
+                        "AvailabilityZone"
+                    ]
+                },
+                "VpcSecurityGroupIds": [
+                    {
+                        "Ref": "AuroraSecurity"
+                    }
+                ],
+                "ReplicationInstanceIdentifier": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "migration",
+                            {
+                                "Ref": "AWS::StackName"
+                            }
+                        ]
+                    ]
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "8f87ed67-f6c5-4997-b911-fa8b291457ae"
+                }
+            }
+        }
+    },
+    "Outputs": {
+        "VPCID": {
+            "Description": "VPC Id",
+            "Value": {
+                "Ref": "VPC"
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-VPCID"
+                }
+            }
+        },
+        "OracleUsername": {
+            "Description": "Oracle Username",
+            "Value": "HRDATA"
+        },
+        "OraclePassword": {
+            "Description": "Oracle Password",
+            "Value": "hrdata"
+        },
+        "OracleSID": {
+            "Description": "Oracle SID",
+            "Value": "XE"
+        },
+        "OraclePORT": {
+            "Description": "Oracle default PORT",
+            "Value": "1521"
+        },
+        "AuroraPostgreSQLPORT": {
+            "Description": "Amazon Aurora MySQL default PORT",
+            "Value": "5432"
+        },
+        "OracleIpAddress": {
+            "Description": "Public IP of the Oracle database running in Amazon Linux Instance to emulate Oracle on-premise.",
+            "Value": {
+                "Ref": "EipAddressLinux"
+            }
+        },
+        "OracleEndpointName": {
+            "Description": "DNS Endpoint of the Oracle database running in Amazon Linux Instance to emulate Oracle on-premise.",
+            "Value": {
+                "Fn::GetAtt": [
+                    "Ec2InstanceLinux",
+                    "PublicDnsName"
+                ]
+            }
+        },
+        "IAMEC2InstanceRoleForMigrationName": {
+            "Description": "The IAM role to be associated with the EC2 Instance",
+            "Value": {
+                "Ref": "EC2InstanceRoleForMigration"
+            }
+        },
+        "AuroraSecurityGroupID": {
+            "Description": "Name of RDS Aurora MySQL  SecurityGroup ID.",
+            "Value": {
+                "Ref": "AuroraSecurity"
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-AuroraSecurityGroupID"
+                }
+            }
+        },
+        "AuroraPostgreSQLClusterEndPoint": {
+            "Description": "RDS Aurora Postgresql cluster end point",
+            "Value": {
+                "Fn::GetAtt": [
+                    "AuroraCluster",
+                    "Endpoint.Address"
+                ]
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-AuroraEndPoint"
+                }
+            }
+        },
+        "AuroraPostgreSQLUserName": {
+            "Description": "RDS Aurora MySQL  username",
+            "Value": {
+                "Ref": "AuroraDBUsername"
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-AuroraUserName"
+                }
+            }
+        },
+        "AuroraPostgreSQLPassword": {
+            "Description": "RDS Aurora MySQL  password",
+            "Value": {
+                "Ref": "AuroraDBPassword"
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-AuroraPassword"
+                }
+            }
+        },
+        "AuroraSubnetAZ": {
+            "Description": "RDS Aurora MySQL AvailabilityZone",
+            "Value": {
+                "Fn::GetAtt": [
+                    "PublicSubnet1",
+                    "AvailabilityZone"
+                ]
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-AuroraSubnetAZ"
+                }
+            }
+        },
+        "AuroraSubnetID": {
+            "Description": "RDS Aurora MySQL AvailabilityZone",
+            "Value": {
+                "Ref": "PublicSubnet1"
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-AuroraSubnetID"
+                }
+            }
+        },
+        "AuroraPostgreSQLDatabaseName": {
+            "Description": "RDS Aurora MySQL database name",
+            "Value": "mydb",
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-AuroraDatabaseName"
+                }
+            }
+        },
+        "AuroraPostgreSQLJDBCConnectionString": {
+            "Description": "JDBC connection string for Aurora database",
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "jdbc:mysql://",
+                        {
+                            "Fn::GetAtt": [
+                                "AuroraCluster",
+                                "Endpoint.Address"
+                            ]
+                        },
+                        ":",
+                        {
+                            "Fn::GetAtt": [
+                                "AuroraCluster",
+                                "Endpoint.Port"
+                            ]
+                        },
+                        "/HRDATA"
+                    ]
+                ]
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-AuroraJDBCConnectionString"
+                }
+            }
+        },
+        "S3BucketName": {
+            "Description": "Name of S3 bucket",
+            "Value": {
+                "Ref": "S3Bucket"
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-S3BucketName"
+                }
+            }
+        }
+    },
+    "Metadata": {
+        "AWS::CloudFormation::Designer": {
+            "4c093ce1-220a-435c-958a-b9077703e858": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 810,
+                    "y": 90
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "4c2b6143-50a6-46e7-8e3c-0ec6a10caece": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 930,
+                    "y": 90
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "1ad148de-64a4-49ce-a01b-0b988e26a9a9": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 810,
+                    "y": 210
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15": {
+                "size": {
+                    "width": 690,
+                    "height": 600
+                },
+                "position": {
+                    "x": 60,
+                    "y": 90
+                },
+                "z": 1,
+                "embeds": [
+                    "d928a3d7-b52a-48b0-8340-c70c88dafa6c",
+                    "f48aa8ff-ba91-47bd-a634-cc89ed0a6cef",
+                    "3cb4ecf9-1fab-48b2-a954-cf8f10babb02",
+                    "1469d6ec-5a33-4802-ab76-4cd81dab74df",
+                    "f2ba4dbe-ef77-436f-99d6-bc335fd062e9",
+                    "1abce30d-0a31-460b-9280-000d01129eb5"
+                ]
+            },
+            "d928a3d7-b52a-48b0-8340-c70c88dafa6c": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 300,
+                    "y": 450
+                },
+                "z": 2,
+                "parent": "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                "embeds": [],
+                "dependson": [
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15"
+                ]
+            },
+            "f4eb0c6f-a143-4d2b-bee6-fb7871f6fc33": {
+                "source": {
+                    "id": "d928a3d7-b52a-48b0-8340-c70c88dafa6c"
+                },
+                "target": {
+                    "id": "d928a3d7-b52a-48b0-8340-c70c88dafa6c"
+                },
+                "z": 2
+            },
+            "f48aa8ff-ba91-47bd-a634-cc89ed0a6cef": {
+                "size": {
+                    "width": 240,
+                    "height": 240
+                },
+                "position": {
+                    "x": 390,
+                    "y": 150
+                },
+                "z": 2,
+                "parent": "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                "embeds": [
+                    "cb1c810f-6be0-44ee-8d7e-39cc127c4597"
+                ],
+                "iscontainedinside": [
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15"
+                ]
+            },
+            "0bd5fdf7-4dfe-4076-8c5d-4b6e3b03fe0b": {
+                "source": {
+                    "id": "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15"
+                },
+                "target": {
+                    "id": "1ad148de-64a4-49ce-a01b-0b988e26a9a9"
+                },
+                "z": 1
+            },
+            "cb1c810f-6be0-44ee-8d7e-39cc127c4597": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 420,
+                    "y": 210
+                },
+                "z": 3,
+                "parent": "f48aa8ff-ba91-47bd-a634-cc89ed0a6cef",
+                "embeds": [],
+                "isassociatedwith": [
+                    "1ad148de-64a4-49ce-a01b-0b988e26a9a9"
+                ],
+                "iscontainedinside": [
+                    "f48aa8ff-ba91-47bd-a634-cc89ed0a6cef",
+                    "f48aa8ff-ba91-47bd-a634-cc89ed0a6cef",
+                    "f48aa8ff-ba91-47bd-a634-cc89ed0a6cef",
+                    "f48aa8ff-ba91-47bd-a634-cc89ed0a6cef",
+                    "f48aa8ff-ba91-47bd-a634-cc89ed0a6cef",
+                    "f48aa8ff-ba91-47bd-a634-cc89ed0a6cef"
+                ],
+                "dependson": [
+                    "0bd5fdf7-4dfe-4076-8c5d-4b6e3b03fe0b"
+                ]
+            },
+            "3cb4ecf9-1fab-48b2-a954-cf8f10babb02": {
+                "size": {
+                    "width": 100,
+                    "height": 90
+                },
+                "position": {
+                    "x": 90,
+                    "y": 450
+                },
+                "z": 2,
+                "parent": "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                "embeds": [],
+                "iscontainedinside": [
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15"
+                ]
+            },
+            "6f7672fc-de80-492f-a90f-e19975deeedb": {
+                "source": {
+                    "id": "f48aa8ff-ba91-47bd-a634-cc89ed0a6cef"
+                },
+                "target": {
+                    "id": "3cb4ecf9-1fab-48b2-a954-cf8f10babb02"
+                },
+                "z": 2
+            },
+            "1469d6ec-5a33-4802-ab76-4cd81dab74df": {
+                "size": {
+                    "width": 240,
+                    "height": 240
+                },
+                "position": {
+                    "x": 90,
+                    "y": 150
+                },
+                "z": 2,
+                "parent": "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                "embeds": [
+                    "d8dc4bf7-dc2f-484e-98a8-1be6093f1853"
+                ],
+                "dependson": [
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15"
+                ]
+            },
+            "220c0588-2903-4698-bc4d-883ed1138464": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 930,
+                    "y": 210
+                },
+                "z": 1,
+                "embeds": [],
+                "iscontainedinside": [
+                    "1469d6ec-5a33-4802-ab76-4cd81dab74df",
+                    "3cb4ecf9-1fab-48b2-a954-cf8f10babb02"
+                ]
+            },
+            "8f87ed67-f6c5-4997-b911-fa8b291457ae": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 810,
+                    "y": 330
+                },
+                "z": 1,
+                "embeds": [],
+                "isassociatedwith": [
+                    "d928a3d7-b52a-48b0-8340-c70c88dafa6c"
+                ]
+            },
+            "96a432c0-08b0-4a1c-8a1a-f8e6660ca9be": {
+                "size": {
+                    "width": 230,
+                    "height": 170
+                },
+                "position": {
+                    "x": 90,
+                    "y": 750
+                },
+                "z": 1,
+                "embeds": [
+                    "4fc2193a-ac1a-4847-b570-6b68837da441",
+                    "455df1bf-feb2-462c-8f3b-8d789132dcc7"
+                ],
+                "iscontainedinside": [
+                    "1469d6ec-5a33-4802-ab76-4cd81dab74df",
+                    "3cb4ecf9-1fab-48b2-a954-cf8f10babb02"
+                ]
+            },
+            "4fc2193a-ac1a-4847-b570-6b68837da441": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 120,
+                    "y": 810
+                },
+                "z": 2,
+                "parent": "96a432c0-08b0-4a1c-8a1a-f8e6660ca9be",
+                "embeds": [],
+                "isassociatedwith": [
+                    "4c2b6143-50a6-46e7-8e3c-0ec6a10caece",
+                    "d928a3d7-b52a-48b0-8340-c70c88dafa6c"
+                ],
+                "iscontainedinside": [
+                    "96a432c0-08b0-4a1c-8a1a-f8e6660ca9be",
+                    "96a432c0-08b0-4a1c-8a1a-f8e6660ca9be",
+                    "96a432c0-08b0-4a1c-8a1a-f8e6660ca9be",
+                    "96a432c0-08b0-4a1c-8a1a-f8e6660ca9be",
+                    "96a432c0-08b0-4a1c-8a1a-f8e6660ca9be",
+                    "96a432c0-08b0-4a1c-8a1a-f8e6660ca9be"
+                ]
+            },
+            "455df1bf-feb2-462c-8f3b-8d789132dcc7": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 240,
+                    "y": 810
+                },
+                "z": 2,
+                "parent": "96a432c0-08b0-4a1c-8a1a-f8e6660ca9be",
+                "embeds": [],
+                "isassociatedwith": [
+                    "4fc2193a-ac1a-4847-b570-6b68837da441",
+                    "4c093ce1-220a-435c-958a-b9077703e858"
+                ],
+                "iscontainedinside": [
+                    "96a432c0-08b0-4a1c-8a1a-f8e6660ca9be",
+                    "96a432c0-08b0-4a1c-8a1a-f8e6660ca9be",
+                    "96a432c0-08b0-4a1c-8a1a-f8e6660ca9be",
+                    "96a432c0-08b0-4a1c-8a1a-f8e6660ca9be",
+                    "96a432c0-08b0-4a1c-8a1a-f8e6660ca9be",
+                    "96a432c0-08b0-4a1c-8a1a-f8e6660ca9be"
+                ]
+            },
+            "3a1b795d-92a7-4877-9385-b2a80b6d3335": {
+                "source": {
+                    "id": "f48aa8ff-ba91-47bd-a634-cc89ed0a6cef"
+                },
+                "target": {
+                    "id": "1469d6ec-5a33-4802-ab76-4cd81dab74df"
+                },
+                "z": 2
+            },
+            "14ad5d1e-e1b6-4f82-b671-8f503c50b318": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 930,
+                    "y": 330
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "43b78832-085f-4aaf-8193-1e11e9f50f21": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 810,
+                    "y": 450
+                },
+                "z": 1,
+                "embeds": [],
+                "isassociatedwith": [
+                    "14ad5d1e-e1b6-4f82-b671-8f503c50b318"
+                ]
+            },
+            "f2ba4dbe-ef77-436f-99d6-bc335fd062e9": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 420,
+                    "y": 450
+                },
+                "z": 2,
+                "parent": "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                "embeds": [],
+                "iscontainedinside": [
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15"
+                ]
+            },
+            "d8dc4bf7-dc2f-484e-98a8-1be6093f1853": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 120,
+                    "y": 210
+                },
+                "z": 3,
+                "parent": "1469d6ec-5a33-4802-ab76-4cd81dab74df",
+                "embeds": [],
+                "iscontainedinside": [
+                    "1469d6ec-5a33-4802-ab76-4cd81dab74df",
+                    "1469d6ec-5a33-4802-ab76-4cd81dab74df",
+                    "1469d6ec-5a33-4802-ab76-4cd81dab74df",
+                    "1469d6ec-5a33-4802-ab76-4cd81dab74df",
+                    "1469d6ec-5a33-4802-ab76-4cd81dab74df",
+                    "1469d6ec-5a33-4802-ab76-4cd81dab74df"
+                ]
+            },
+            "18cb7e57-7dc0-4009-aeaa-e4def2ee8cec": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 930,
+                    "y": 450
+                },
+                "z": 1,
+                "embeds": [],
+                "dependson": [
+                    "d8dc4bf7-dc2f-484e-98a8-1be6093f1853"
+                ]
+            },
+            "1abce30d-0a31-460b-9280-000d01129eb5": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 540,
+                    "y": 450
+                },
+                "z": 2,
+                "parent": "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                "embeds": [],
+                "iscontainedinside": [
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                    "f48aa8ff-ba91-47bd-a634-cc89ed0a6cef",
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15",
+                    "8b6a02b1-11d4-4040-9d5a-ed5f1ff5dd15"
+                ]
+            },
+            "be2a1872-05e1-404b-bea1-cab2674c488c": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 810,
+                    "y": 570
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "b4be218c-2282-4ec3-a399-2bfda8fcde28": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 930,
+                    "y": 570
+                },
+                "z": 1,
+                "embeds": [],
+                "isassociatedwith": [
+                    "be2a1872-05e1-404b-bea1-cab2674c488c"
+                ]
+            },
+            "b41493aa-be9f-445d-ad3d-cfeaf660396c": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 810,
+                    "y": 690
+                },
+                "z": 1,
+                "embeds": []
+            }
+        }
+    }
+}
