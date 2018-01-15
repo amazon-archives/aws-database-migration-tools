@@ -1,6 +1,7 @@
 # DMS Blog
 
-This the companion scripts and Cloudformation template for the Blog to move data from S3 to a PostgreSQL database.
+This the companion scripts and Cloudformation template for the Blog to move data from S3 to a PostgreSQL database.\
+Link to the blog - https://aws.amazon.com/blogs/database/stream-data-into-an-aurora-postgresql-database-using-aws-dms-and-amazon-kinesis-data-firehose/ 
 
 ## Getting Started
 
