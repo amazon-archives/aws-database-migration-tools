@@ -1,0 +1,706 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "This CloudFormation creates an Amazon VPC with two subnets, a security group, an Oracle database from the publicly available snapshot, a target RDS PostgreSQL database and two EC2 instances.",
+  "Parameters": {
+    "OracleDatabaseName": {
+      "Default": "AWSORA",
+      "Description": "Predefined Oracle Database name",
+      "AllowedValues": [
+        "AWSORA"
+      ],
+      "Type": "String"
+    },
+    "OracleInstanceType": {
+      "Description": "Oracle DB instance type",
+      "Type": "String",
+      "Default": "db.m4.xlarge",
+      "AllowedValues": [
+        "db.m4.xlarge"
+      ],
+      "ConstraintDescription": "For this Blog post we are using db.m4.xlarge instance type."
+    },
+    "DBSnapshotIdentifier": {
+      "Description": " The RDS Oracle snapshot name to restore to the new DB instance. Make certain that the snapshot exists.",
+      "Type": "String",
+      "Default": "arn:aws:rds:us-east-1:900514285683:snapshot:ws-blogs-oracle-2-postgres-source-data-set",
+      "AllowedValues": [
+        "arn:aws:rds:us-east-1:900514285683:snapshot:ws-blogs-oracle-2-postgres-source-data-set"
+      ]
+    },
+    "OracleDBAllocatedStorage": {
+      "Description": " The Oracle RDS allocated storage in GB.",
+      "Type": "String",
+      "Default": "500",
+      "AllowedValues": [
+        "500"
+      ]
+    },
+    "OracleDBInstanceIdentifier": {
+      "Description": " The RDS Oracle database instance identifier",
+      "Type": "String",
+      "Default": "awsorains",
+      "AllowedValues": [
+        "awsorains"
+      ]
+    },
+    "PostgreSQLDBInstanceIdentifier": {
+      "Description": " The RDS PostgreSQL database instance identifier",
+      "Type": "String",
+      "Default": "awspgins",
+      "AllowedValues": [
+        "awspgins"
+      ]
+    },
+    "PostgreSQLDBInstanceClass": {
+      "Description": " The RDS PostgreSQL database instance type",
+      "Type": "String",
+      "Default": "db.m4.xlarge",
+      "AllowedValues": [
+        "db.m4.xlarge"
+      ],
+      "ConstraintDescription": "For this Blog post we are using db.m4.xlarge instance type."
+    },
+    "PostgreSQLDBName": {
+      "Description": " The RDS PostgreSQL database instance identifier",
+      "Type": "String",
+      "Default": "awspgdb",
+      "AllowedValues": [
+        "awspgdb"
+      ]
+    },
+    "PostgreSQLDBUserName": {
+      "Description": " The RDS PostgreSQL database username",
+      "Type": "String",
+      "Default": "root",
+      "AllowedValues": [
+        "root"
+      ]
+    },
+    "PostgreSQLDBPassword": {
+      "Description": " The RDS PostgreSQL database password",
+      "Type": "String",
+      "Default": "Rootroot123",
+      "AllowedValues": [
+        "Rootroot123"
+      ]
+    },
+    "PostgreSQLDBAllocatedStorage": {
+      "Description": " The RDS PostgreSQL database size (Gb)",
+      "Type": "Number",
+      "Default": "500",
+      "AllowedValues": [
+        "500"
+      ]
+    },
+    "KeyName": {
+      "Description": "Name of an existing EC2 KeyPair to enable SSH access to the instance",
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "ConstraintDescription": "must be the name of an existing EC2 KeyPair."
+    },
+    "ClientIP": {
+      "Description": "The IP address range that can be used to connect to the RDS instances and EC2 instance from your local machine.It must be a valid IP CIDR range of the form x.x.x.x/x.Pls get your address using checkip.amazonaws.com or whatsmyip.org",
+      "Type": "String",
+      "MinLength": "9",
+      "MaxLength": "18",
+      "Default": "0.0.0.0/0",
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "ConstraintDescription": "It must be a valid IP CIDR range of the form x.x.x.x/x. Suggest to enable access to your IP address only. Pls get your address using checkip.amazonaws.com or whatsmyip.org."
+    },
+    "DataLoadingIntoOracleEC2InstanceType": {
+      "Description": "EC2 instance Type For Loading Test Data Into Source RDS Oracle",
+      "Type": "String",
+      "Default": "m4.xlarge",
+      "AllowedValues": [
+        "m4.xlarge"
+      ],
+      "ConstraintDescription": "must be a valid EC2 instance type."
+    },
+    "Ora2PGEC2InstanceType": {
+      "Description": "EC2 instance Type For Ora2pg Tool Install and Configuration",
+      "Type": "String",
+      "Default": "m4.4xlarge",
+      "AllowedValues": [
+        "m4.4xlarge"
+      ],
+      "ConstraintDescription": "must be a valid EC2 instance type."
+    }
+  },
+  "Rules": {
+    "SubnetsInVPC": {
+      "Assertions": [{
+        "Assert": {
+          "Fn::EachMemberIn": [{
+            "Fn::ValueOfAll": [
+              "AWS::EC2::Subnet::Id",
+              "VpcId"
+            ]
+          }, {
+            "Fn::RefAll": "AWS::EC2::VPC::Id"
+          }
+          ]
+        },
+        "AssertDescription": "All subnets must in the VPC"
+      }
+      ]
+    }
+  },
+  "Metadata": {
+    "AWS::CloudFormation::Interface": {
+      "ParameterGroups": [
+        {
+          "Label": {
+            "default": "Source RDS Oracle Database Configuration"
+          },
+          "Parameters": [
+            "OracleDatabaseName",
+            "OracleInstanceType",
+            "DBSnapshotIdentifier",
+            "OracleDBAllocatedStorage",
+            "OracleDBInstanceIdentifier"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Target RDS PostgreSQL Database Configuration"
+          },
+          "Parameters": [
+            "PostgreSQLDBInstanceIdentifier",
+            "PostgreSQLDBInstanceClass",
+            "PostgreSQLDBName",
+            "PostgreSQLDBUserName",
+            "PostgreSQLDBPassword",
+            "PostgreSQLDBAllocatedStorage"
+          ]
+        },
+        {
+          "Label": {
+            "default": "EC2 instances Common Parameters"
+          },
+          "Parameters": [
+            "KeyName",
+            "ClientIP"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Data Loading Into Source RDS Oracle EC2 Instance Parameters"
+          },
+          "Parameters": [
+            "DataLoadingIntoOracleEC2InstanceType"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Ora2PG Tool EC2 Instance Parameters"
+          },
+          "Parameters": [
+            "Ora2PGEC2InstanceType"
+          ]
+        }
+      ]
+    }
+  },
+  "Mappings": {
+    "OracleRDSInstanceType": {
+      "us-east-1": {
+        "inst": "db.m4.xlarge"
+      }
+    },
+    "OracleSanpVersion": {
+      "us-east-1": {
+        "snapid": "arn:aws:rds:us-east-1:900514285683:snapshot:ws-blogs-oracle-2-postgres-source-data-set"
+      }
+    },
+    "AWSInstanceType2Arch": {
+      "m4.xlarge": {
+        "Arch": "HVM64"
+      },
+      "m4.4xlarge": {
+        "Arch": "HVM64"
+      }
+    },
+    "AWSRegionArch2AMI": {
+      "us-east-1": {
+        "HVM64": "ami-1853ac65"
+      }
+    }
+  },
+  "Resources": {
+    "resVPC": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": "10.0.0.0/16",
+        "EnableDnsSupport": true,
+        "EnableDnsHostnames": true,
+        "InstanceTenancy": "default",
+        "Tags": [{
+          "Key": "Name",
+          "Value": "Ora2PGBlogVPC"
+        }]
+      }
+    },
+    "resPublicSubnetInAZ1A": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "resVPC"
+        },
+        "AvailabilityZone": "us-east-1a",
+        "CidrBlock": "10.0.1.0/24",
+        "MapPublicIpOnLaunch": "True",
+        "Tags": [{
+          "Key": "Name",
+          "Value": "Ora2PGBlogSubnetInAZ1A"
+        }]
+      }
+    },
+    "resPublicSubnetInAZ1B": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "resVPC"
+        },
+        "AvailabilityZone": "us-east-1b",
+        "CidrBlock": "10.0.2.0/24",
+        "MapPublicIpOnLaunch": "True",
+        "Tags": [{
+          "Key": "Name",
+          "Value": "Ora2PGBlogSubnetInAZ1B"
+        }]
+      }
+    },
+    "resInternetGateway": {
+      "Type": "AWS::EC2::InternetGateway",
+      "Properties": {
+        "Tags": [{
+          "Key": "Name",
+          "Value": "Ora2PGInternetGateway"
+        }]
+      }
+    },
+    "resGatewayAttachment": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "InternetGatewayId": {
+          "Ref": "resInternetGateway"
+        },
+        "VpcId": {
+          "Ref": "resVPC"
+        }
+      }
+    },
+    "resPublicRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "resVPC"
+        }
+      }
+    },
+    "resPublicRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "resPublicRouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Ref": "resInternetGateway"
+        }
+      },
+      "DependsOn": [
+        "resGatewayAttachment"
+      ]
+    },
+    "resPublicSubnetRouteAssociation1A": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "resPublicRouteTable"
+        },
+        "SubnetId": {
+          "Ref": "resPublicSubnetInAZ1A"
+        }
+      }
+    },
+    "resPublicSubnetRouteAssociation1B": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "resPublicRouteTable"
+        },
+        "SubnetId": {
+          "Ref": "resPublicSubnetInAZ1B"
+        }
+      }
+    },
+    "resSGBase": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupName": "ora2pgblogsecuritygroup",
+        "GroupDescription": "Base Security Group",
+        "VpcId": {
+          "Ref": "resVPC"
+        },
+        "SecurityGroupEgress": [
+          {
+            "CidrIp": "0.0.0.0/0",
+            "IpProtocol": "-1",
+            "FromPort": -1,
+            "ToPort": -1
+          }
+        ],
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "CidrIp": {
+              "Ref": "ClientIP"
+            },
+            "FromPort": "22",
+            "ToPort": "22"
+          },
+          {
+            "IpProtocol": "tcp",
+            "CidrIp": {
+              "Ref": "ClientIP"
+            },
+            "FromPort": "5432",
+            "ToPort": "5432"
+          }
+        ]
+      }
+    },
+    "resSGBaseIngress": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Fn::GetAtt": [
+            "resSGBase",
+            "GroupId"
+          ]
+        },
+        "IpProtocol": "-1",
+        "FromPort": "-1",
+        "ToPort": "-1",
+        "SourceSecurityGroupId": {
+          "Fn::GetAtt": [
+            "resSGBase",
+            "GroupId"
+          ]
+        }
+      }
+    },
+    "resOra2PGDBSubnetGroup": {
+      "Type": "AWS::RDS::DBSubnetGroup",
+      "Properties": {
+        "DBSubnetGroupDescription": "Subnet available for the RDS DB Instance.",
+        "SubnetIds":[
+          {
+            "Ref": "resPublicSubnetInAZ1A"
+          },
+          {
+            "Ref": "resPublicSubnetInAZ1B"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "cfn"
+          }
+        ]
+      }
+    },
+    "resOracleDB": {
+      "Type": "AWS::RDS::DBInstance",
+      "Properties": {
+        "DBName": {
+          "Ref": "OracleDatabaseName"
+        },
+        "AllocatedStorage": {
+          "Ref": "OracleDBAllocatedStorage"
+        },
+        "MasterUsername": "admin",
+        "MasterUserPassword": "admin123",
+        "DBInstanceClass": {
+          "Ref": "OracleInstanceType"
+        },
+        "DBInstanceIdentifier": {
+          "Ref": "OracleDBInstanceIdentifier"
+        },
+        "Engine": "oracle-ee",
+        "LicenseModel": "bring-your-own-license",
+        "PubliclyAccessible": "true",
+        "AvailabilityZone": "us-east-1a",
+        "MultiAZ": "false",
+        "BackupRetentionPeriod": "7",
+        "DBSubnetGroupName": {
+          "Ref": "resOra2PGDBSubnetGroup"
+        },
+        "VPCSecurityGroups": [
+          {
+            "Ref": "resSGBase"
+          }
+        ],
+        "DBSnapshotIdentifier": {
+          "Fn::FindInMap": [
+            "OracleSanpVersion",
+            {
+              "Ref": "AWS::Region"
+            },
+            "snapid"
+          ]
+        },
+        "StorageType": "io1",
+        "Iops": "3000",
+        "Tags": [
+          {
+            "Key": "Application",
+            "Value": {
+              "Ref": "AWS::StackId"
+            }
+          }
+        ]
+      }
+    },
+    "resPgDB": {
+      "Type": "AWS::RDS::DBInstance",
+      "Properties": {
+        "DBName": {
+          "Ref": "PostgreSQLDBName"
+        },
+        "DBInstanceIdentifier": {
+          "Ref": "PostgreSQLDBInstanceIdentifier"
+        },
+        "AllocatedStorage": {
+          "Ref": "PostgreSQLDBAllocatedStorage"
+        },
+        "DBInstanceClass": {
+          "Ref": "PostgreSQLDBInstanceClass"
+        },
+        "Engine": "postgres",
+        "MasterUsername": {
+          "Ref": "PostgreSQLDBUserName"
+        },
+        "MasterUserPassword": {
+          "Ref": "PostgreSQLDBPassword"
+        },
+        "DBSubnetGroupName": {
+          "Ref": "resOra2PGDBSubnetGroup"
+        },
+        "VPCSecurityGroups": [
+          {
+            "Ref": "resSGBase"
+          }
+        ],
+        "AvailabilityZone": "us-east-1a",
+        "MultiAZ": "false",
+        "StorageType": "io1",
+        "Iops": "3000"
+      }
+    },
+    "resEC2InstanceForDataLoadingIntoSource": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "KeyName": {
+          "Ref": "KeyName"
+        },
+        "InstanceType": {
+          "Ref": "DataLoadingIntoOracleEC2InstanceType"
+        },
+        "ImageId": {
+          "Fn::FindInMap": [
+            "AWSRegionArch2AMI",
+            {
+              "Ref": "AWS::Region"
+            },
+            {
+              "Fn::FindInMap": [
+                "AWSInstanceType2Arch",
+                {
+                  "Ref": "DataLoadingIntoOracleEC2InstanceType"
+                },
+                "Arch"
+              ]
+            }
+          ]
+        },
+        "NetworkInterfaces": [
+          {
+            "DeviceIndex": "0",
+            "AssociatePublicIpAddress": "true",
+            "DeleteOnTermination": "true",
+            "SubnetId": {
+              "Ref": "resPublicSubnetInAZ1A"
+            },
+            "GroupSet": [
+              {
+                "Ref": "resSGBase"
+              }
+            ]
+          }
+        ],
+        "Tags" : [
+          {
+            "Key" : "Name",
+            "Value" : "Ora2pg-blog-EC2InstanceFor-SourceDataLoading"
+          }
+        ]
+      }
+    },
+    "resOra2PgEC2Instance": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "KeyName": {
+          "Ref": "KeyName"
+        },
+        "InstanceType": {
+          "Ref": "Ora2PGEC2InstanceType"
+        },
+        "ImageId": {
+          "Fn::FindInMap": [
+            "AWSRegionArch2AMI",
+            {
+              "Ref": "AWS::Region"
+            },
+            {
+              "Fn::FindInMap": [
+                "AWSInstanceType2Arch",
+                {
+                  "Ref": "Ora2PGEC2InstanceType"
+                },
+                "Arch"
+              ]
+            }
+          ]
+        },
+        "NetworkInterfaces": [
+          {
+            "DeviceIndex": "0",
+            "AssociatePublicIpAddress": "true",
+            "DeleteOnTermination": "true",
+            "SubnetId": {
+              "Ref": "resPublicSubnetInAZ1A"
+            },
+            "GroupSet": [
+              {
+                "Ref": "resSGBase"
+              }
+            ]
+          }
+        ],
+        "Tags" : [
+          {
+            "Key" : "Name",
+            "Value" : "Ora2pg-blog-EC2InstanceFor-Ora2pg-Configuration"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs":
+  {
+    "StackName": {
+      "Value": {
+        "Ref": "AWS::StackName"
+      }
+    },
+    "VPCID": {
+      "Description": "VPC ID Created For Ora2Pg Blog",
+      "Value": {
+        "Ref": "resVPC"
+      }
+    },
+    "SubnetID1A": {
+      "Description": "Subnet ID created in Availabilty Zone 1A",
+      "Value": {
+        "Ref": "resPublicSubnetInAZ1A"
+      }
+    },
+    "SubnetID1B": {
+      "Description": "Subnet ID created in Availabilty Zone 1B",
+      "Value": {
+        "Ref": "resPublicSubnetInAZ1B"
+      }
+    },
+    "Regionname": {
+      "Value": {
+        "Ref": "AWS::Region"
+      }
+    },
+    "SecurityGroupId":{
+      "Description": "Security Group that was created and assigned to all components.",
+      "Value": {
+        "Fn::GetAtt": [
+          "resSGBase",
+          "GroupId"
+        ]
+      }
+    },
+    "EC2InstanceForSourceDataLoadingInstanceId": {
+      "Description": "InstanceId of the newly created EC2 instance for loading test data into source RDS Oracle database",
+      "Value": {
+        "Ref": "resEC2InstanceForDataLoadingIntoSource"
+      }
+    },
+    "EC2InstanceForSourceDataLoadingAZ": {
+      "Description": "Availability Zone of the newly EC2 instance for loading test data into source RDS Oracle database",
+      "Value": {
+        "Fn::GetAtt": [
+          "resEC2InstanceForDataLoadingIntoSource",
+          "AvailabilityZone"
+        ]
+      }
+    },
+    "EC2InstanceForSourceDataLoadingPublicDNS": {
+      "Description": "Public DNSName of the newly created EC2 instance for loading test data into source RDS Oracle database",
+      "Value": {
+        "Fn::GetAtt": [
+          "resEC2InstanceForDataLoadingIntoSource",
+          "PublicDnsName"
+        ]
+      }
+    },
+    "EC2InstanceForOra2PgInstanceId": {
+      "Description": "InstanceId of the newly created EC2 instance for loading test data into source RDS Oracle database",
+      "Value": {
+        "Ref": "resOra2PgEC2Instance"
+      }
+    },
+    "EC2InstanceForOra2PgAvailabilityZone": {
+      "Description": "Availability Zone of the newly EC2 instance for loading test data into source RDS Oracle database",
+      "Value": {
+        "Fn::GetAtt": [
+          "resOra2PgEC2Instance",
+          "AvailabilityZone"
+        ]
+      }
+    },
+    "EC2InstanceForOra2PgPublicDNS": {
+      "Description": "Public DNSName of the newly created EC2 instance for loading test data into source RDS Oracle database",
+      "Value": {
+        "Fn::GetAtt": [
+          "resOra2PgEC2Instance",
+          "PublicDnsName"
+        ]
+      }
+    },
+    "SourceRDSOracleEndPoint": {
+      "Description": "Source RDS Oracle Endpoint",
+      "Value": {
+        "Fn::GetAtt": [
+          "resOracleDB",
+          "Endpoint.Address"
+        ]
+      }
+    },
+    "TargetRDSPostgreSQLEndPoint":{
+      "Description": "Target RDS PostgreSQL Endpoint",
+      "Value": {
+        "Fn::GetAtt": [
+          "resPgDB",
+          "Endpoint.Address"
+        ]
+      }
+    }
+  }
+}

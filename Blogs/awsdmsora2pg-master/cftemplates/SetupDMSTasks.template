@@ -1,0 +1,120 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "This CloudFormation sample template creates DMS tasks",
+  "Rules": {
+    "SubnetsInVPC": {
+      "Assertions": [{
+        "Assert": {
+          "Fn::EachMemberIn": [{
+            "Fn::ValueOfAll": [
+              "AWS::EC2::Subnet::Id",
+              "VpcId"
+            ]
+          }, {
+            "Fn::RefAll": "AWS::EC2::VPC::Id"
+          }
+          ]
+        },
+        "AssertDescription": "All subnets must in the VPC"
+      }
+      ]
+    }
+  },
+  "Parameters": {
+    "DMSReplicationInstanceARN": {
+      "Description": "Provide DMS replication instance ARN, You can get this value from the output of second Cloudformation template",
+      "Type": "String"
+    },
+    "DMSTargetSPostgreSQLEndpointARN": {
+      "Description": "Provide DMS target end Point ARN, You can get this value from the output of second Cloudformation template",
+      "Type": "String"
+    },
+    "DMSSourceOracleEndpointARN": {
+      "Type": "String",
+      "Description": "Provide DMS source end Point ARN, You can get this value from the output of second Cloudformation template"
+    },
+    "DMSCDCTaskStartTimeInMilliSeconds": {
+      "Type": "Number",
+      "Description": "Get the value from 'scn_information_from_source.out' log file generated from the Ora2pg tool Full copy. You can find the converted timestamp value that can be used in this log file."
+    }
+  },
+  "Resources":
+  {
+    "CustomerTableMigrationTask":{
+      "Type": "AWS::DMS::ReplicationTask",
+      "Properties": {
+        "CdcStartTime":{"Ref" : "DMSCDCTaskStartTimeInMilliSeconds" },
+        "MigrationType": "cdc",
+        "ReplicationInstanceArn": {
+          "Ref": "DMSReplicationInstanceARN"
+        },
+        "ReplicationTaskIdentifier": "customer-table-dms-task",
+        "SourceEndpointArn": {
+          "Ref": "DMSSourceOracleEndpointARN"
+        },
+        "TargetEndpointArn": {
+          "Ref": "DMSTargetSPostgreSQLEndpointARN"
+        },
+        "ReplicationTaskSettings": "{\"TargetMetadata\":{\"SupportLobs\":true,\"FullLobMode\":true,\"LimitedSizeLobMode\":false,\"LobMaxSize\":64},\"FullLoadSettings\":{\"TargetTablePrepMode\":\"DO_NOTHING\"},\"Logging\":{\"EnableLogging\":true},\"ControlTablesSettings\":{\"ControlSchema\":\"awspgctrlschema\",\"HistoryTimeslotInMinutes\":5,\"HistoryTableEnabled\":true,\"SuspendedTablesTableEnabled\":true,\"StatusTableEnabled\":true}}",
+        "TableMappings": "{\"rules\":[{\"rule-type\":\"selection\",\"rule-id\":\"1\",\"rule-name\":\"1\",\"object-locator\":{\"schema-name\":\"AWSORAUSER\",\"table-name\":\"CUSTOMER\"},\"rule-action\":\"include\"},{\"rule-type\":\"transformation\",\"rule-id\":\"2\",\"rule-name\":\"2\",\"rule-target\":\"schema\",\"object-locator\":{\"schema-name\":\"AWSORAUSER\"},\"rule-action\":\"rename\",\"value\":\"awspgschema\"},{\"rule-type\":\"transformation\",\"rule-id\":\"3\",\"rule-name\":\"3\",\"rule-target\":\"table\",\"object-locator\":{\"schema-name\":\"AWSORAUSER\",\"table-name\":\"CUSTOMER\"},\"rule-action\":\"convert-lowercase\"},{\"rule-type\":\"transformation\",\"rule-id\":\"4\",\"rule-name\":\"4\",\"rule-target\":\"column\",\"object-locator\":{\"schema-name\":\"AWSORAUSER\",\"table-name\":\"CUSTOMER\",\"column-name\":\"%\"},\"rule-action\":\"convert-lowercase\"}]}"
+      }
+    },
+    "PartTableMigrationTask":{
+      "Type": "AWS::DMS::ReplicationTask",
+      "Properties": {
+        "CdcStartTime":{"Ref" : "DMSCDCTaskStartTimeInMilliSeconds" },
+        "MigrationType": "cdc",
+        "ReplicationInstanceArn": {
+          "Ref": "DMSReplicationInstanceARN"
+        },
+        "ReplicationTaskIdentifier": "part-table-dms-task",
+        "SourceEndpointArn": {
+          "Ref": "DMSSourceOracleEndpointARN"
+        },
+        "TargetEndpointArn": {
+          "Ref": "DMSTargetSPostgreSQLEndpointARN"
+        },
+        "ReplicationTaskSettings": "{\"TargetMetadata\":{\"SupportLobs\":true,\"FullLobMode\":true,\"LimitedSizeLobMode\":false,\"LobMaxSize\":64},\"FullLoadSettings\":{\"TargetTablePrepMode\":\"DO_NOTHING\"},\"Logging\":{\"EnableLogging\":true},\"ControlTablesSettings\":{\"ControlSchema\":\"awspgctrlschema\",\"HistoryTimeslotInMinutes\":5,\"HistoryTableEnabled\":true,\"SuspendedTablesTableEnabled\":true,\"StatusTableEnabled\":true}}",
+        "TableMappings": "{\"rules\":[{\"rule-type\":\"selection\",\"rule-id\":\"1\",\"rule-name\":\"1\",\"object-locator\":{\"schema-name\":\"AWSORAUSER\",\"table-name\":\"PART\"},\"rule-action\":\"include\"},{\"rule-type\":\"transformation\",\"rule-id\":\"2\",\"rule-name\":\"2\",\"rule-target\":\"schema\",\"object-locator\":{\"schema-name\":\"AWSORAUSER\"},\"rule-action\":\"rename\",\"value\":\"awspgschema\"},{\"rule-type\":\"transformation\",\"rule-id\":\"3\",\"rule-name\":\"3\",\"rule-target\":\"table\",\"object-locator\":{\"schema-name\":\"AWSORAUSER\",\"table-name\":\"PART\"},\"rule-action\":\"convert-lowercase\"},{\"rule-type\":\"transformation\",\"rule-id\":\"4\",\"rule-name\":\"4\",\"rule-target\":\"column\",\"object-locator\":{\"schema-name\":\"AWSORAUSER\",\"table-name\":\"PART\",\"column-name\":\"%\"},\"rule-action\":\"convert-lowercase\"}]}"
+      }
+    },
+    "SupplierTableMigrationTask":{
+      "Type": "AWS::DMS::ReplicationTask",
+      "Properties": {
+        "CdcStartTime":{"Ref" : "DMSCDCTaskStartTimeInMilliSeconds" },
+        "MigrationType": "cdc",
+        "ReplicationInstanceArn": {
+          "Ref": "DMSReplicationInstanceARN"
+        },
+        "ReplicationTaskIdentifier": "supplier-table-dms-task",
+        "SourceEndpointArn": {
+          "Ref": "DMSSourceOracleEndpointARN"
+        },
+        "TargetEndpointArn": {
+          "Ref": "DMSTargetSPostgreSQLEndpointARN"
+        },
+        "ReplicationTaskSettings": "{\"TargetMetadata\":{\"SupportLobs\":true,\"FullLobMode\":false,\"LimitedSizeLobMode\":true,\"LobMaxSize\":32},\"FullLoadSettings\":{\"TargetTablePrepMode\":\"DO_NOTHING\"},\"Logging\":{\"EnableLogging\":true},\"ControlTablesSettings\":{\"ControlSchema\":\"awspgctrlschema\",\"HistoryTimeslotInMinutes\":5,\"HistoryTableEnabled\":true,\"SuspendedTablesTableEnabled\":true,\"StatusTableEnabled\":true}}",
+        "TableMappings": "{\"rules\":[{\"rule-type\":\"selection\",\"rule-id\":\"1\",\"rule-name\":\"1\",\"object-locator\":{\"schema-name\":\"AWSORAUSER\",\"table-name\":\"SUPPLIER\"},\"rule-action\":\"include\"},{\"rule-type\":\"transformation\",\"rule-id\":\"2\",\"rule-name\":\"2\",\"rule-target\":\"schema\",\"object-locator\":{\"schema-name\":\"AWSORAUSER\"},\"rule-action\":\"rename\",\"value\":\"awspgschema\"},{\"rule-type\":\"transformation\",\"rule-id\":\"3\",\"rule-name\":\"3\",\"rule-target\":\"table\",\"object-locator\":{\"schema-name\":\"AWSORAUSER\",\"table-name\":\"SUPPLIER\"},\"rule-action\":\"convert-lowercase\"},{\"rule-type\":\"transformation\",\"rule-id\":\"4\",\"rule-name\":\"4\",\"rule-target\":\"column\",\"object-locator\":{\"schema-name\":\"AWSORAUSER\",\"table-name\":\"SUPPLIER\",\"column-name\":\"%\"},\"rule-action\":\"convert-lowercase\"}]}"
+      }
+    },
+    "RegionNationTablesMigrationTask":{
+      "Type": "AWS::DMS::ReplicationTask",
+      "Properties": {
+        "CdcStartTime":{"Ref" : "DMSCDCTaskStartTimeInMilliSeconds" },
+        "MigrationType": "cdc",
+        "ReplicationInstanceArn": {
+          "Ref": "DMSReplicationInstanceARN"
+        },
+        "ReplicationTaskIdentifier": "region-nation-tables-dms-task",
+        "SourceEndpointArn": {
+          "Ref": "DMSSourceOracleEndpointARN"
+        },
+        "TargetEndpointArn": {
+          "Ref": "DMSTargetSPostgreSQLEndpointARN"
+        },
+        "ReplicationTaskSettings": "{\"TargetMetadata\":{\"SupportLobs\":true,\"FullLobMode\":false,\"LimitedSizeLobMode\":true,\"LobMaxSize\":32},\"FullLoadSettings\":{\"TargetTablePrepMode\":\"DO_NOTHING\"},\"Logging\":{\"EnableLogging\":true},\"ControlTablesSettings\":{\"ControlSchema\":\"awspgctrlschema\",\"HistoryTimeslotInMinutes\":5,\"HistoryTableEnabled\":true,\"SuspendedTablesTableEnabled\":true,\"StatusTableEnabled\":true}}",
+        "TableMappings": "{\"rules\":[{\"rule-type\":\"selection\",\"rule-id\":\"1\",\"rule-name\":\"1\",\"object-locator\":{\"schema-name\":\"AWSORAUSER\",\"table-name\":\"REGION\"},\"rule-action\":\"include\"},{\"rule-type\":\"selection\",\"rule-id\":\"2\",\"rule-name\":\"2\",\"object-locator\":{\"schema-name\":\"AWSORAUSER\",\"table-name\":\"NATION\"},\"rule-action\":\"include\"},{\"rule-type\":\"transformation\",\"rule-id\":\"3\",\"rule-name\":\"3\",\"rule-target\":\"schema\",\"object-locator\":{\"schema-name\":\"AWSORAUSER\"},\"rule-action\":\"rename\",\"value\":\"awspgschema\"},{\"rule-type\":\"transformation\",\"rule-id\":\"4\",\"rule-name\":\"4\",\"rule-target\":\"table\",\"object-locator\":{\"schema-name\":\"AWSORAUSER\",\"table-name\":\"REGION\"},\"rule-action\":\"convert-lowercase\"},{\"rule-type\":\"transformation\",\"rule-id\":\"5\",\"rule-name\":\"5\",\"rule-target\":\"column\",\"object-locator\":{\"schema-name\":\"AWSORAUSER\",\"table-name\":\"REGION\",\"column-name\":\"%\"},\"rule-action\":\"convert-lowercase\"},{\"rule-type\":\"transformation\",\"rule-id\":\"6\",\"rule-name\":\"6\",\"rule-target\":\"table\",\"object-locator\":{\"schema-name\":\"AWSORAUSER\",\"table-name\":\"NATION\"},\"rule-action\":\"convert-lowercase\"},{\"rule-type\":\"transformation\",\"rule-id\":\"7\",\"rule-name\":\"7\",\"rule-target\":\"column\",\"object-locator\":{\"schema-name\":\"AWSORAUSER\",\"table-name\":\"NATION\",\"column-name\":\"%\"},\"rule-action\":\"convert-lowercase\"}]}"
+      }
+    }
+  }
+}

@@ -1,0 +1,312 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "This CloudFormation sample template creates source and target end points and DMS instance.",
+  "Rules": {
+    "SubnetsInVPC": {
+      "Assertions": [{
+        "Assert": {
+          "Fn::EachMemberIn": [{
+            "Fn::ValueOfAll": [
+              "AWS::EC2::Subnet::Id",
+              "VpcId"
+            ]
+          }, {
+            "Fn::RefAll": "AWS::EC2::VPC::Id"
+          }
+          ]
+        },
+        "AssertDescription": "All subnets must in the VPC"
+      }
+      ]
+    }
+  },
+  "Parameters": {
+    "TargetPostgreSQLDBPort": {
+      "Description": "Database Port for Target RDS PostgreSQL Endpoint",
+      "Type": "String",
+      "Default": 5432,
+      "AllowedValues": ["5432"]
+    },
+    "SourceRDSOracleDBPort": {
+      "Description": "Database Port for Source RDS Oracle Endpoint",
+      "Type": "String",
+      "Default": 1521,
+      "AllowedValues": ["1521"]
+    },
+    "DMSInstanceType": {
+      "Description": "Select the instance class that allocates the computational, network, and memory capacity required by this replication instance.",
+      "Type": "String",
+      "Default": "dms.c4.4xlarge",
+      "AllowedValues": [
+        "dms.c4.4xlarge"
+      ],
+      "ConstraintDescription": "must select a valid database instance type."
+    },
+    "SourceRDSOracleDatabaseName": {
+      "Description": "The name of the source Oracle database.",
+      "Type": "String",
+      "Default": "AWSORA",
+      "AllowedValues": [
+        "AWSORA"
+      ]
+    },
+    "TargetRDSPostgreSQLDatabaseName": {
+      "Description": "The name of the Target PostgreSQL database.",
+      "Type": "String",
+      "Default": "awspgdb",
+      "AllowedValues": [
+        "awspgdb"
+      ]
+    },
+    "SourceRDSOracleUserName": {
+      "Description": "The user name with the permissions required to allow data migration.",
+      "Type": "String",
+      "Default": "awsorauser",
+      "AllowedValues": [
+        "awsorauser"
+      ]
+    },
+    "TargetRDSPostgreSQLUserName": {
+      "Description": "The user name with the permissions required to allow data migration.",
+      "Type": "String",
+      "Default": "root",
+      "AllowedValues": [
+        "root"
+      ]
+    },
+    "SourceRDSOracleDBPassword": {
+      "Description": "Source DB password",
+      "Type": "String",
+      "Default": "awsorauser",
+      "AllowedValues": [
+        "awsorauser"
+      ]
+    },
+    "TargetRDSPostgreSQLDBPassword": {
+      "Description": "Source DB password",
+      "Type": "String",
+      "Default": "Rootroot123",
+      "AllowedValues": [
+        "Rootroot123"
+      ]
+    },
+    "DMSSubnet1": {
+      "Description": "ID of subnet 1 in Availability Zone 1 (e.g., subnet-a0246dcd)",
+      "Type": "AWS::EC2::Subnet::Id"
+    },
+    "DMSSubnet2": {
+      "Description": "ID of subnet 2 in Availability Zone 2 (e.g., subnet-a0246dcd)",
+      "Type": "AWS::EC2::Subnet::Id"
+    },
+    "VPCSecurityGroupId":{
+      "Type": "String",
+      "Description":"Get this value from the First template output. The same securityGroup Id that will be assigned to DMS Instance"
+    },
+    "SourceRDSOracleEndpointID": {
+      "Type": "String",
+      "Description": "The database endpoint identifier for Oracle. Identifiers must begin with a letter; must contain only ASCII letters, digits, and hyphens; and must not end with a hyphen or contain two consecutive hyphens."
+    },
+    "TargetRDSPostgreSQLEndpointID": {
+      "Type": "String",
+      "Description": "The database endpoint identifier for Aurora. Identifiers must begin with a letter; must contain only ASCII letters, digits, and hyphens; and must not end with a hyphen or contain two consecutive hyphens."
+    },
+    "VPCID": {
+      "Description": "Select the Virtual Private Cloud (VPC) that defines the virtual networking environment for this replication instance",
+      "Type": "AWS::EC2::VPC::Id"
+    }
+  },
+  "Metadata": {
+    "AWS::CloudFormation::Interface": {
+      "ParameterGroups": [
+        {
+          "Label": {
+            "default": "AWS DMS Instance Parameters"
+          },
+          "Parameters": [
+            "DMSInstanceType"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Source RDS Oracle Database Configuration"
+          },
+          "Parameters": [
+            "SourceRDSOracleEndpointID",
+            "SourceRDSOracleDatabaseName",
+            "SourceRDSOracleUserName",
+            "SourceRDSOracleDBPassword",
+            "SourceRDSOracleDBPort"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Target RDS PostgreSQL Database Configuration"
+          },
+          "Parameters": [
+            "TargetRDSPostgreSQLEndpointID",
+            "TargetRDSPostgreSQLDatabaseName",
+            "TargetRDSPostgreSQLDBPassword",
+            "TargetRDSPostgreSQLUserName",
+            "TargetRDSPostgreSQLDBPassword",
+            "TargetPostgreSQLDBPort"
+          ]
+        },
+        {
+          "Label": {
+            "default": "VPC, Subnet and Security Group Configuration"
+          },
+          "Parameters": [
+            "VPCID",
+            "VPCSecurityGroupId",
+            "DMSSubnet1",
+            "DMSSubnet2"
+          ]
+        }
+      ]
+    }
+  },
+  "Resources":
+  {
+    "resIAMLambdaRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": [
+              "sts:AssumeRole"
+            ]
+          }
+          ]
+        },
+        "Path": "/",
+        "Policies": [{
+          "PolicyName": "lambda-DMS-KMS",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Sid": "Stmt1507238964000",
+              "Effect": "Allow",
+              "Action": [
+                "cloudwatch:*",
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents",
+                "dms:*",
+                "ec2:CreateNetworkInterface",
+                "ec2:DescribeNetworkInterfaces",
+                "ec2:DeleteNetworkInterface"
+              ],
+              "Resource": [
+                "*"
+              ]
+            }
+            ]
+          }
+        }
+        ]
+      }
+    },
+    "resReplicationSubnetGroup": {
+      "Type": "AWS::DMS::ReplicationSubnetGroup",
+      "Properties": {
+        "ReplicationSubnetGroupIdentifier": "dms-subnet-group",
+        "ReplicationSubnetGroupDescription": "DMS subnet group",
+        "SubnetIds": [{
+          "Ref": "DMSSubnet1"
+        }, {
+          "Ref": "DMSSubnet2"
+        }
+        ]
+      }
+    },
+    "resReplicationInstance": {
+      "Type": "AWS::DMS::ReplicationInstance",
+      "Properties": {
+        "ReplicationInstanceClass": {
+          "Ref": "DMSInstanceType"
+        },
+        "ReplicationInstanceIdentifier": "dms-replication-instance1",
+        "VpcSecurityGroupIds": [{
+          "Ref": "VPCSecurityGroupId"
+        }],
+        "ReplicationSubnetGroupIdentifier": {
+          "Ref": "resReplicationSubnetGroup"
+        },
+        "PubliclyAccessible": "false",
+        "MultiAZ": "false"
+      }
+    },
+    "resSourceOracleEndpoint": {
+      "Type": "AWS::DMS::Endpoint",
+      "Properties": {
+        "EngineName": "oracle",
+        "EndpointIdentifier": "SourceOra2pgDMSEndPointIdentifier",
+        "EndpointType": "source",
+        "Username": {
+          "Ref": "SourceRDSOracleUserName"
+        },
+        "Password": {
+          "Ref": "SourceRDSOracleDBPassword"
+        },
+        "ServerName": {
+          "Ref": "SourceRDSOracleEndpointID"
+        },
+        "Port": {
+          "Ref": "SourceRDSOracleDBPort"
+        },
+        "DatabaseName": {
+          "Ref": "SourceRDSOracleDatabaseName"
+        },
+        "ExtraConnectionAttributes": "addSupplementalLogging=Y;useLogminerReader=Y"
+      }
+    },
+    "resTargetPostgreSQLEndpoint": {
+      "Type": "AWS::DMS::Endpoint",
+      "Properties": {
+        "EngineName": "postgres",
+        "EndpointIdentifier": "TargetOra2pgDMSEndPointIdentifier",
+        "EndpointType": "target",
+        "Username": {
+          "Ref": "TargetRDSPostgreSQLUserName"
+        },
+        "Password": {
+          "Ref": "TargetRDSPostgreSQLDBPassword"
+        },
+        "ServerName": {
+          "Ref": "TargetRDSPostgreSQLEndpointID"
+        },
+        "Port": {
+          "Ref": "TargetPostgreSQLDBPort"
+        },
+        "DatabaseName": {
+          "Ref": "TargetRDSPostgreSQLDatabaseName"
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "DMSRepulicationInstanceARN": {
+      "Description": "Name of the DMS Replication Instance",
+      "Value": {
+        "Ref": "resReplicationInstance"
+      }
+    },
+    "DMTargetSPostgreSQLEndpointARN": {
+      "Description": "Name of the RDS PostgreSQL database Target Endpoint.",
+      "Value": {
+        "Ref": "resTargetPostgreSQLEndpoint"
+      }
+    },
+    "DMSSourceOracleEndpointARN": {
+      "Description": "Name of the RDS Oracle database Source Endpoint.",
+      "Value": {
+        "Ref": "resSourceOracleEndpoint"
+      }
+    }
+  }
+}

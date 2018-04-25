@@ -1,0 +1,12 @@
+(
+  c_custkey,
+  c_name,
+  c_address,
+  c_nationkey,
+  c_phone,
+  c_acctbal,
+  c_mktsegment,
+  c_comment,
+  c_some_lob_filename     FILLER CHAR(100),
+  c_some_lob LOBFILE(c_some_lob_filename) TERMINATED BY EOF
+)
