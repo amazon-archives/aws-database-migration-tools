@@ -1,0 +1,173 @@
+#
+# baffle-migration-demo-template.yaml - Template to deploy AWS resources
+# Copyright 2017-2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License").
+# You may not use this file except in compliance with the License.
+# A copy of the License is located at
+#
+# http://aws.amazon.com/apache2.0/
+#
+# or in the "license" file accompanying this file. This file is distributed 
+# on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either 
+# express or implied. See the License for the specific language governing 
+#  permissions and limitations under the License.
+#
+
+AWSTemplateFormatVersion: 2010-09-09
+Description: Migrate data to RDS in encrypted format
+
+Metadata:
+    About:
+        Description: "Migrate data to RDS in encrypted format"
+    Author:
+        Description: "Min-Hank Ho"
+    Date:
+        Description: "2018-03-15"
+    AWS::CloudFormation::Interface:
+        ParameterGroups:
+            - Label:
+                default: "Network Configuration"
+              Parameters:
+                - Vpc
+                - KeyName
+            - Label:
+                default: "Target Database Configuration"
+              Parameters:
+                - RDSInstanceName
+                - DatabaseUsername
+                - DatabasePassword
+        ParameterLabels:
+            Vpc:
+                default: "VPC ID"
+            KeyName:
+                default: "Key Pair"
+            RDSInstanceName:
+                default: "DB Instance Name"
+            DatabaseUsername:
+                default: "DB Username"
+            DatabasePassword:
+                default: "DB Password"
+
+Parameters:
+    RDSInstanceName:
+        Type: String
+        Default: "TargetDB"
+        Description: "Target RDS instance for migration"
+        AllowedPattern: "[a-zA-Z0-9]*"
+    DatabaseUsername:
+        Type: String
+        Default: "baffledemo"
+        Description: "Target Database Username"
+        AllowedPattern: "[a-zA-Z0-9]*"
+    DatabasePassword:
+        Type: String
+        Description: "Database Password, between 8-41 characters"
+        NoEcho: true
+        AllowedPattern: "[a-zA-Z0-9]*"
+        MinLength: 8
+        MaxLength: 41
+    Vpc:
+        Type: AWS::EC2::VPC::Id
+        Description: "VPC where the instances will be placed"
+    KeyName:
+        Type: AWS::EC2::KeyPair::KeyName
+        Description: "Key pair name used to access to the EC2 instance (username will be 'centos')"
+
+Mappings:
+    RegionMap:
+        us-east-1:
+            AMI: ami-0dd11a70
+            DeviceName: /dev/xvda
+        us-east-2:
+            AMI: ami-2951604c
+            DeviceName: /dev/xvda
+        us-west-1:
+            AMI: ami-32dbcc52
+            DeviceName: /dev/xvda
+        us-west-2:
+            AMI: ami-3694084e
+            DeviceName: /dev/xvda
+        ca-central-1:
+            AMI: ami-13d15777
+            DeviceName: /dev/xvda
+        eu-west-1:
+            AMI: ami-651b4f1c
+            DeviceName: /dev/xvda
+        eu-central-1:
+            AMI: ami-d154043a
+            DeviceName: /dev/xvda
+        eu-west-2:
+            AMI: ami-b2d036d5
+            DeviceName: /dev/xvda
+        eu-west-3:
+            AMI: ami-d83482a5
+            DeviceName: /dev/xvda
+    
+Resources:
+    BaffleDMSDemoSecurityGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+            GroupDescription: "BaffleDMSDemoSG"
+            VpcId:
+                Ref: Vpc
+            SecurityGroupIngress:
+                - IpProtocol: tcp
+                  FromPort: 22
+                  ToPort: 22
+                  CidrIp: 0.0.0.0/0
+                - IpProtocol: tcp
+                  FromPort: 3306
+                  ToPort: 3306
+                  CidrIp: 0.0.0.0/0
+                - IpProtocol: tcp
+                  FromPort: 8444
+                  ToPort: 8444
+                  CidrIp: 0.0.0.0/0
+            SecurityGroupEgress:
+                - IpProtocol: tcp
+                  FromPort: 0
+                  ToPort: 65535
+                  CidrIp: 0.0.0.0/0
+
+#EC2 instance with MySQL DB contain data that needs to migrate to RDS
+    SourceDatabase:
+        Type: AWS::EC2::Instance
+        Properties:
+            ImageId: !FindInMap [ RegionMap, !Ref "AWS::Region", AMI ]
+            InstanceType: t2.small
+            SecurityGroupIds:
+                - !Ref BaffleDMSDemoSecurityGroup
+            KeyName: !Ref KeyName
+            BlockDeviceMappings:
+                - DeviceName: /dev/xvda
+                  Ebs:
+                      VolumeSize: 30
+                      VolumeType: gp2
+
+#RDS instance to migrate encrypted data into
+    TargetDatabase:
+        Type: AWS::RDS::DBInstance
+        Properties:
+            DBInstanceIdentifier: !Ref RDSInstanceName
+            AllocatedStorage: 10
+            DBInstanceClass: db.t2.small
+            StorageType: gp2
+            Engine: mysql
+            EngineVersion: 5.7.19
+            MasterUsername: !Ref DatabaseUsername
+            MasterUserPassword: !Ref DatabasePassword
+            VPCSecurityGroups:
+                - !GetAtt BaffleDMSDemoSecurityGroup.GroupId
+            MultiAZ: false
+
+#DMS replication instance
+    DMSDemoInstance:
+        Type: AWS::DMS::ReplicationInstance
+        Properties:
+            ReplicationInstanceClass: dms.t2.micro
+            ReplicationInstanceIdentifier: BaffleMigrationDemoDMS
+
+Outputs:
+    TargetDatabaseAddress:
+        Value: !GetAtt TargetDatabase.Endpoint.Address
