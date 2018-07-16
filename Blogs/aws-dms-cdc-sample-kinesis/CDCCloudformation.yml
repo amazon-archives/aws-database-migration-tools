@@ -1,0 +1,240 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: 'AWS CloudFormation to set up CDC with DMS, Lambda and Kinesis'
+Parameters:
+  DatabaseInstanceType:
+    Default: db.r3.8xlarge
+    AllowedValues:
+      - db.m4.2xlarge
+      - db.r3.4xlarge
+      - db.r3.8xlarge
+    Description: The instance type to use for this test iteration.
+    Type: String
+  TargetS3BucketName:
+    Description: The S3 bucket name for DMS target
+    Type: String
+  LambdaRuntime:
+    Description: The Lambda runtime to use
+    Type: String
+    Default: java8
+  HandlerName:
+    Description: The name of the lambda handler
+    Type: String
+    Default: com.amazonaws.lambda.demo.LambdaFunctionHandler
+  CodeS3Bucket:
+    Description: The name of the bucket that contains your Lambda ZIP code
+    Type: String
+  S3Keys32kinesis:
+    Description: The name of the first Lambda ZIP package
+    Type: String
+    Default: s32kinesis.zip
+  MasterUserPassword:
+    NoEcho: true
+    Description: The master password for the DB instance.
+    Type: String
+  S3Keyconsumekinesis:
+    Description: The name of the second Lambda ZIP package
+    Type: String
+    Default: consumekinesis.zip
+  ReplicationInstance:
+    Default: dms.c4.large
+    AllowedValues:
+      - dms.t2.micro
+      - dms.t2.small
+      - dms.t2.medium
+      - dms.t2.large
+      - dms.c4.large
+      - dms.c4.xlarge
+      - dms.c4.2xlarge
+      - dms.c4.4xlarge
+    Description: The instance type to use for the replication instance.
+    Type: String
+Resources:
+  SQLDatabase:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      AutoMinorVersionUpgrade: false
+      BackupRetentionPeriod: 1
+      CharacterSetName: String
+      DBInstanceClass: !Ref DatabaseInstanceType
+      MasterUserPassword: !Ref MasterUserPassword
+      DBSnapshotIdentifier: 'arn:aws:rds:us-east-1:638426169984:snapshot:sqlcustomer-snapshot-may28'
+      DBSubnetGroupName: default
+  s32kinesis:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Code:
+        S3Bucket: !Ref CodeS3Bucket
+        S3Key: !Ref S3Keys32kinesis
+      Handler: !Ref HandlerName
+      FunctionName: s32kinesis
+      Role: !GetAtt 
+        - LambdaExecutionRole
+        - Arn
+      Runtime: !Ref LambdaRuntime
+      Timeout: '300'
+      MemorySize: '1024'
+      Environment:
+        Variables:
+          KinesisStream: testkinesisstream
+  consumekinesis:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Handler: !Ref HandlerName
+      FunctionName: consumekinesis
+      Role: !GetAtt 
+        - LambdaExecutionRole
+        - Arn
+      Code:
+        S3Bucket: !Ref CodeS3Bucket
+        S3Key: !Ref S3Keyconsumekinesis
+      Runtime: !Ref LambdaRuntime
+      Timeout: '300'
+      MemorySize: '1024'
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: 'arn:aws:logs:*:*:*'
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                Resource:
+                  - 'arn:aws:s3:::*'
+              - Effect: Allow
+                Action: 'kinesis:*'
+                Resource: '*'
+  testkinesisstream:
+    Type: 'AWS::Kinesis::Stream'
+    Properties:
+      Name: testkinesisstream
+      ShardCount: 1
+  testkinesisstreamEventSource:
+    Type: 'AWS::Lambda::EventSourceMapping'
+    Properties:
+      FunctionName: !Ref consumekinesis
+      Enabled: true
+      EventSourceArn: !GetAtt 
+        - testkinesisstream
+        - Arn
+      StartingPosition: LATEST
+  LambdaInvokePermission:
+    Type: 'AWS::Lambda::Permission'
+    DependsOn:
+      - s32kinesis
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !GetAtt 
+        - s32kinesis
+        - Arn
+      Principal: s3.amazonaws.com
+      SourceArn: !Join 
+        - ''
+        - - 'arn:aws:s3:::'
+          - !Ref TargetS3BucketName
+  s3buketaskinesis:
+    Type: 'AWS::S3::Bucket'
+    DependsOn:
+      - s32kinesis
+      - LambdaInvokePermission
+    Properties:
+      AccessControl: BucketOwnerFullControl
+      BucketName: !Ref TargetS3BucketName
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Function: !GetAtt 
+              - s32kinesis
+              - Arn
+            Event: 's3:ObjectCreated:*'
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: dbo/CustomerInformation
+  DMSReplicationInstance:
+    Type: 'AWS::DMS::ReplicationInstance'
+    Properties:
+      AllocatedStorage: 100
+      MultiAZ: false
+      PubliclyAccessible: false
+      ReplicationInstanceClass: !Ref ReplicationInstance
+  DMSExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - dms.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: DMSservicerole
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: 's3:*'
+                Resource: '*'
+  DMSEndpoint:
+    Type: 'AWS::DMS::Endpoint'
+    Properties:
+      EngineName: sqlserver
+      EndpointType: source
+      Username: AWSUser
+      Password: !Ref MasterUserPassword
+      ServerName: !Sub '${SQLDatabase.Endpoint.Address}'
+      Port: 1433
+      DatabaseName: CustomerDB
+    DependsOn:
+      - SQLDatabase
+  DMSEndpointS3:
+    Type: 'AWS::DMS::Endpoint'
+    Properties:
+      EndpointType: target
+      EngineName: S3
+      ExtraConnectionAttributes: 'maxfilesize=102400'
+      S3Settings:
+        BucketName: !Ref TargetS3BucketName
+        ServiceAccessRoleArn: !GetAtt 
+          - DMSExecutionRole
+          - Arn
+    DependsOn:
+      - s3buketaskinesis
+  DMSTaskMigration:
+    Type: 'AWS::DMS::ReplicationTask'
+    Properties:
+      MigrationType: full-load-and-cdc
+      ReplicationInstanceArn: !Ref DMSReplicationInstance
+      SourceEndpointArn: !Ref DMSEndpoint
+      TableMappings: >-
+        {"rules": [{"rule-type": "selection", "rule-id": "1", "rule-action":
+        "include", "object-locator": {"schema-name": "%", "table-name": "%"},
+        "rule-name": "1"}]}
+      TargetEndpointArn: !Ref DMSEndpointS3
+Outputs:
+  SQLDatabaseEndpoint:
+    Description: Database endpoint
+    Value: !Sub '${SQLDatabase.Endpoint.Address}:${SQLDatabase.Endpoint.Port}'
