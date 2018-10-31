@@ -1,0 +1,197 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Metadata:
+    About:
+        Description: "Migrate database with initial load and ongoing replication using Accelario and DMS"
+    Author:
+        Description: "Michael Litner"
+    Date:
+        Description: "2018-08-07"
+    AWS::CloudFormation::Interface:
+        ParameterGroups:
+            - Label:
+                default: "Network Configuration"
+              Parameters:
+                - Vpc
+                - KeyName
+            - Label:
+                default: "Databases Configuration"
+              Parameters:
+                - MasterUsername
+                - MasterPassword
+        ParameterLabels:
+            Vpc:
+                default: "VPC ID"
+            KeyName:
+                default: "Key Pair"
+            MasterUsername:
+                default: "Master RDS username"
+            MasterPassword:
+                default: "Master RDS password"
+
+Parameters:
+    Vpc:
+        Type: AWS::EC2::VPC::Id
+        Description: "VPC where the RDS databases will be created"
+    KeyName:
+        Type: AWS::EC2::KeyPair::KeyName
+        Description: "Key pair name used to access to the Accelario EC2 instance (username will be 'ec2-user')"
+    MasterUsername:
+        Type: String
+        Default: "master"
+        Description: "Master Database Username"
+        AllowedPattern: "[a-zA-Z0-9]*"
+    MasterPassword:
+        Type: String
+        Description: "Master Database Password"
+        NoEcho: true
+        AllowedPattern: "^[a-zA-Z].*"
+        MinLength: 8
+        MaxLength: 41
+
+Mappings:
+    RegionMap:
+        us-east-1:
+            AMI: ami-046210a1110762908
+            DeviceName: /dev/xvda
+        us-east-2:
+            AMI: ami-09b8822caca35f7c5
+            DeviceName: /dev/xvda
+        us-west-1:
+            AMI: ami-0e12089e04293b139
+            DeviceName: /dev/xvda
+        us-west-2:
+            AMI: ami-0c4140c9d32febc44
+            DeviceName: /dev/xvda
+        ca-central-1:
+            AMI: ami-06a13df48a2ad2d79
+            DeviceName: /dev/xvda
+        eu-west-1:
+            AMI: ami-0c219de422b51aa45
+            DeviceName: /dev/xvda
+        eu-central-1:
+            AMI: ami-0c9d71792580ff8e3
+            DeviceName: /dev/xvda
+        eu-west-2:
+            AMI: ami-0a40ce38970bdcd1b
+            DeviceName: /dev/xvda
+        eu-west-3:
+            AMI: ami-0c6ff21f946324a9e
+            DeviceName: /dev/xvda
+        ap-southeast-1:
+            AMI: ami-0495c4c5edcb51ba4
+            DeviceName: /dev/xvda
+        ap-southeast-2:
+            AMI: ami-08d8331ddb5bc69aa
+            DeviceName: /dev/xvda
+        ap-northeast-2:
+            AMI: ami-04f2aeb9818a19970
+            DeviceName: /dev/xvda
+        ap-northeast-1:
+            AMI: ami-01314bd74e88f5ba8
+            DeviceName: /dev/xvda
+        ap-south-1:
+            AMI: ami-04d67a8020268a322
+            DeviceName: /dev/xvda
+        sa-east-1:
+            AMI: ami-0e3afbd6494794814
+            DeviceName: /dev/xvda
+
+Resources:
+  accelarioServer:
+        Type: AWS::EC2::Instance
+        Properties:
+            ImageId: !FindInMap [ RegionMap, !Ref "AWS::Region", AMI ]
+            InstanceType: t2.small
+            SecurityGroupIds:
+                - !Ref sgaccelario
+            KeyName: !Ref KeyName
+            BlockDeviceMappings:
+                - DeviceName: /dev/xvda
+                  Ebs:
+                      VolumeSize: 50
+                      VolumeType: gp2
+
+  rdsdestdb:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      AllocatedStorage: '20'
+      AllowMajorVersionUpgrade: 'false'
+      CharacterSetName: UTF8
+      DBInstanceClass: db.t2.medium
+      DBInstanceIdentifier: rdsdestdb
+      Port: '1521'
+      PubliclyAccessible: 'true'
+      StorageType: gp2
+      BackupRetentionPeriod: '1'
+      MasterUsername: !Ref MasterUsername
+      MasterUserPassword: !Ref MasterPassword
+      PreferredBackupWindow: '20:39-21:09'
+      PreferredMaintenanceWindow: 'sun:03:03-sun:03:33'
+      DBName: destdb
+      Engine: oracle-ee
+      EngineVersion: 12.1.0.2.v12
+      LicenseModel: bring-your-own-license
+      DBSubnetGroupName: default
+      VPCSecurityGroups:
+        - !Ref sgoracle
+      Tags:
+        - Key: workload-type
+          Value: other
+  rdssourcedb:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      AllocatedStorage: '20'
+      AllowMajorVersionUpgrade: 'false'
+      CharacterSetName: UTF8
+      DBInstanceClass: db.t2.medium
+      DBInstanceIdentifier: rdssourcedb
+      Port: '1521'
+      PubliclyAccessible: 'true'
+      StorageType: gp2
+      BackupRetentionPeriod: '1'
+      MasterUsername: !Ref MasterUsername
+      MasterUserPassword: !Ref MasterPassword
+      PreferredBackupWindow: '20:39-21:09'
+      PreferredMaintenanceWindow: 'sun:03:03-sun:03:33'
+      DBName: sourcedb
+      Engine: oracle-ee
+      EngineVersion: 12.1.0.2.v12
+      LicenseModel: bring-your-own-license
+      DBSubnetGroupName: default
+      VPCSecurityGroups:
+        - !Ref sgoracle
+      Tags:
+        - Key: workload-type
+          Value: other
+  sgoracle:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: "Allow Oracle connection"
+      VpcId: 
+          Ref: Vpc	  
+      SecurityGroupIngress:
+          - IpProtocol: tcp
+            FromPort: 1521
+            ToPort: 1521
+            CidrIp: 0.0.0.0/0
+            Description: "default Oracle Listener port"
+  sgaccelario:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: "Allow Accelario connection"
+      VpcId: 
+          Ref: Vpc	  
+      SecurityGroupIngress:
+          - IpProtocol: tcp
+            FromPort: 12345
+            ToPort: 12345
+            CidrIp: 0.0.0.0/0
+            Description: "default Accelario port"
+Outputs:
+    AccelarioAddress:
+        Value: !Sub '${accelarioServer.PublicDnsName}:12345/accelario'
+    AccelarioUser: 
+        Value: acc
+    AccelarioPassword: 
+        Value: !Ref accelarioServer
