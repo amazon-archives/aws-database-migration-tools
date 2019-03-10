@@ -16,24 +16,28 @@ import sys
 import maya
 
 
+# Parameters are read for replication task id, start time and end time ranges for the logs
 replication_task_id = sys.argv[1]
 time_string = sys.argv[2]
 end_time_string = sys.argv[3]
 
-def milliseconds_since_epoch(time_string):
-    dt = maya.when(time_string)
-    seconds = dt.epoch
+# Convert the start time to millisecond since epoch
+def start_time_milliseconds_since_epoch(time_string):
+    datetime = maya.when(time_string)
+    seconds = datetime.epoch
     return seconds * 1000
 
-start_time = milliseconds_since_epoch(time_string)
+start_time = start_time_milliseconds_since_epoch(time_string)
 
+# Convert the end time to millisecond since epoch
 def end_time_milliseconds_since_epoch(end_time_string):
-    dt = maya.when(end_time_string)
-    seconds = dt.epoch
+    datetime = maya.when(end_time_string)
+    seconds = datetime.epoch
     return seconds * 1000
 
 end_time = end_time_milliseconds_since_epoch(end_time_string)
 
+# Get the replication tasks based on the replication task id
 def get_replication_tasks():
 
     client = boto3.client('dms')
@@ -51,7 +55,7 @@ def get_replication_tasks():
 
     return response['ReplicationTasks']
 
-
+# Get replication instance arn from the replicationtasks 
 def get_replication_instance_arn():
     for ReplicationTasks in get_replication_tasks():
         ReplicationInstanceArn = ReplicationTasks['ReplicationInstanceArn']
@@ -60,12 +64,9 @@ def get_replication_instance_arn():
 
 rep_instance_arn = get_replication_instance_arn()
 
-def get_replication_id():
-    """List the first 10000 log events from a CloudWatch group.
+# Get replication instances by providing the replication instance arn
+def get_replication_instances():
 
-    :param log_group: Name of the CloudWatch log group.
-
-    """
     client = boto3.client('dms')
     
     response = client.describe_replication_instances(Filters=[
@@ -82,22 +83,19 @@ def get_replication_id():
     
     return response['ReplicationInstances']
 
-def get_log_group():
-    for ReplicationInstances in get_replication_id():
+# Get the replication instance id from the Replication Instance result
+def get_replication_instance_id():
+    for ReplicationInstances in get_replication_instances():
      ReplicationInstanceIdentifier = ReplicationInstances['ReplicationInstanceIdentifier']
 
      return ReplicationInstanceIdentifier
 
-log_group = "dms-tasks-" + get_log_group()
+# Construct log group name by concatenating "dms_tasks" to the replication instance id obtained from the method above
+log_group = "dms-tasks-" + get_replication_instance_id()
 
-print(log_group)
 
-def get_log_events(log_group):
-    """Generate all the log events from a CloudWatch group.
-
-    :param log_group: Name of the CloudWatch log group.
-
-    """
+# Get the cloud watch log events for the DMS Task by supplying the log group, limit and the time range
+def get_cloudwatch_log_events(log_group):
     
     client = boto3.client('logs')
     kwargs = {
@@ -107,13 +105,18 @@ def get_log_events(log_group):
         'endTime': end_time
     }
     while True:
-        resp = client.filter_log_events(**kwargs)
-        yield from resp['events']
+        response = client.filter_log_events(**kwargs)
+        yield from response['events']
         try:
-            kwargs['nextToken'] = resp['nextToken']
+            kwargs['nextToken'] = response['nextToken']
         except KeyError:
             break
-    
-if __name__ == '__main__':
-    for event in get_log_events(log_group):
+
+# In the main method print the cloudatch log events
+def main():
+    for event in get_cloudwatch_log_events(log_group):
         sys.stdout.write(event['message'].rstrip() + '\n')
+
+if __name__ == '__main__':
+    main()
+    
