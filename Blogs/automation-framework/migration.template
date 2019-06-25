@@ -1,0 +1,1386 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Creates CodePipeline for Database Migration Service",
+  "Metadata": {
+    "AWS::CloudFormation::Interface": {
+      "ParameterGroups": [
+        {
+          "Label": {
+            "default": "Database Migration Service Endpoints"
+          },
+          "Parameters": [
+            "pDmsSourceArn",
+            "pDmsTargetArn",
+            "pDmsReplicationArn",
+            "pTaskName"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Target RDS Access and Credentials"
+          },
+          "Parameters": [
+            "pRDSEndpoint",
+            "pRDSName",
+            "pRDSUser",
+            "pRDSPassword"
+          ]
+        },
+        {
+          "Label": {
+            "default": "CodeBuild Configuration and Environment"
+          },
+          "Parameters": [
+            "pCodeBuildSecurityGroup",
+            "pCodeBuildSubnet",
+            "pCodeBuildVPC"
+          ]
+        },
+        {
+          "Label": {
+            "default": "CodePipeline Source Configuration"
+          },
+          "Parameters": [
+            "pS3BucketName",
+            "pS3BucketKey"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Migration Notifications"
+          },
+          "Parameters": [
+            "pMigNotify"
+          ]
+        }
+      ],
+      "ParameterLabels": {
+        "pMigNotify":{
+          "default": "Email address"
+        },
+        "pTaskName": {
+          "default": "DMS Task Name"
+        },
+        "pCodeBuildVPC": {
+          "default": "VPC used by CodeBuild"
+        },
+        "pCodeBuildSubnet": {
+          "default": "SubnetID"
+        },
+        "pCodeBuildSecurityGroup": {
+          "default": "Security Group"
+        },
+        "pS3BucketName": {
+          "default": "S3 Bucket"
+        },
+        "pS3BucketKey": {
+          "default": "S3 Key"
+        },
+        "pRDSEndpoint": {
+          "default": "RDS Endpoint"
+        },
+        "pRDSName": {
+          "default": "Database Name"
+        },
+        "pRDSUser": {
+          "default": "Database Username"
+        },
+        "pRDSPassword": {
+          "default": "Database Password"
+        },
+        "pDmsSourceArn": {
+          "default": "Source Endpoint Arn"
+        },
+        "pDmsTargetArn": {
+          "default": "Target Endpoint Arn"
+        },
+        "pDmsReplicationArn": {
+          "default": "Replication instance Arn"
+        }
+      }
+    }
+  },
+  "Parameters": {
+    "pMigNotify":{
+      "Type":"String",
+      "Description":"This email will get notifications on Migration Status"
+    },
+    "pCodeBuildSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup::Id",
+      "AllowedPattern": "^[a-zA-Z0-9-\\-_.]{3,63}",
+      "Description": "Security group used by CodeBuild. Please ensure that this has access to RDS endpoint"
+    },
+    "pCodeBuildSubnet": {
+      "Type": "AWS::EC2::Subnet::Id",
+      "AllowedPattern": "^[a-zA-Z0-9-\\-_.]{3,63}",
+      "Description": "Private subnet id with NAT gateway where codebuild will be launched"
+    },
+    "pCodeBuildVPC": {
+      "Type": "AWS::EC2::VPC::Id",
+      "AllowedPattern": "^[a-zA-Z0-9-\\-_.]{3,63}",
+      "Description": "VPC Id where codebuild will be launched. Subnet and security group should belong to this VPC."
+    },
+    "pS3BucketKey": {
+      "Type": "String",
+      "AllowedPattern": "^[a-zA-Z0-9-\\-_.]{3,63}",
+      "Description": "The location of file which is used as source for CodePipeline"
+    },
+    "pS3BucketName": {
+      "Type": "String",
+      "AllowedPattern": "^[a-zA-Z0-9-\\-_.]{3,63}",
+      "Description": "The name of the S3 bucket where the code resides. This will be used as source for the CodePipeline"
+    },
+    "pRDSEndpoint": {
+      "Type": "String",
+      "AllowedPattern": "^[a-zA-Z0-9-\\-_.]{3,63}",
+      "Description": "RDS endpoint where the schema changes will take place"
+    },
+    "pRDSName": {
+      "Type": "String",
+      "AllowedPattern": "^[a-zA-Z0-9-\\-_.]{3,63}",
+      "Description": "RDS database name for deployments"
+    },
+    "pRDSPassword": {
+      "Type": "String",
+      "AllowedPattern": "^[a-zA-Z0-9-\\-_.]{3,63}",
+      "Description": "The database user password for deployment",
+      "NoEcho": "true"
+    },
+    "pTaskName": {
+      "Type": "String",
+      "AllowedPattern": "^[a-zA-Z0-9-\\-_.]{3,63}",
+      "Description": "Name of DMS task"
+    },
+    "pDmsSourceArn": {
+      "Type": "String",
+      "Description": "Arn of source endpoint which was successfully tested with replication instance"
+    },
+    "pDmsTargetArn": {
+      "Type": "String",
+      "Description": "Arn of source endpoint which was successfully tested with replication instance"
+    },
+    "pDmsReplicationArn": {
+      "Type": "String",
+      "Description": "Arn of replication instance used for migration"
+    },
+    "pRDSUser": {
+      "Type": "String",
+      "AllowedPattern": "^[a-zA-Z0-9-\\-_.]{3,63}",
+      "Description": "RDS database user name"
+    }
+  },
+  "Resources": {
+    "rAppPipelineEvents":{
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Description": "EventRule",
+        "EventPattern":{
+            "source": [
+              "aws.codepipeline"
+            ],
+            "detail-type": [
+              "CodePipeline Pipeline Execution State Change"
+            ],
+            "detail": {
+              "state": [
+                "FAILED"
+              ],
+              "pipeline":[
+                {"Ref":"rAppPipeline"}
+              ]
+            }
+          },
+        "State": "ENABLED",
+        "Targets": [{
+          "Arn": { "Ref": "rMigNotify" },
+          "Id": "MigrationPipeline"
+        }]
+      }
+    },
+    "rMigNotify":{
+      "Type":"AWS::SNS::Topic",
+      "Properties":{
+      "Subscription":  [ {
+            "Endpoint" : {"Ref":"pMigNotify"},
+            "Protocol" : "email"
+        } ]
+      }
+    },
+
+
+    "rMigNotifyPolicy": {
+      "Type": "AWS::SNS::TopicPolicy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": { "Service": "events.amazonaws.com" },
+              "Action": "sns:Publish",
+              "Resource": "*"
+            }
+          ]
+        },
+        "Topics": [ {"Ref": "rMigNotify"} ]
+      }
+    },
+    "rAppPipeline": {
+      "Type": "AWS::CodePipeline::Pipeline",
+      "Properties": {
+        "ArtifactStore": {
+          "Location": {
+            "Ref": "rArtifactStoreS3Location"
+          },
+          "Type": "S3"
+        },
+        "RoleArn": {
+          "Fn::GetAtt": [
+            "rAppPipelineRole",
+            "Arn"
+          ]
+        },
+        "Stages": [
+          {
+            "Actions": [
+              {
+                "ActionTypeId": {
+                  "Category": "Source",
+                  "Owner": "AWS",
+                  "Provider": "S3",
+                  "Version": "1"
+                },
+                "Configuration": {
+                  "PollForSourceChanges": true,
+                  "S3Bucket": {
+                    "Ref": "pS3BucketName"
+                  },
+                  "S3ObjectKey": {
+                    "Ref": "pS3BucketKey"
+                  }
+                },
+                "Name": "Source",
+                "OutputArtifacts": [
+                  {
+                    "Name": "AppSource"
+                  }
+                ],
+                "RunOrder": 1
+              }
+            ],
+            "Name": "Source"
+          },
+          {
+            "Actions": [
+              {
+                "ActionTypeId": {
+                  "Category": "Build",
+                  "Owner": "AWS",
+                  "Provider": "CodeBuild",
+                  "Version": "1"
+                },
+                "Configuration": {
+                  "ProjectName": {
+                    "Ref": "rApplicationCodeBuild"
+                  }
+                },
+                "InputArtifacts": [
+                  {
+                    "Name": "AppSource"
+                  }
+                ],
+                "Name": "SetupTarget",
+                "OutputArtifacts": [
+                  {
+                    "Name": "AppBuild"
+                  }
+                ],
+                "RunOrder": 1
+              }
+            ],
+            "Name": "Setup"
+          },
+          {
+            "Actions": [
+              {
+                "ActionTypeId": {
+                  "Category": "Approval",
+                  "Owner": "AWS",
+                  "Provider": "Manual",
+                  "Version": "1"
+                },
+                "Configuration": {
+                  "NotificationArn": {
+                    "Ref": "rSnsApproval"
+                  }
+                },
+                "Name": "ApprovalForDMS",
+                "RunOrder": 1
+              }
+            ],
+            "Name": "Approve"
+          },
+          {
+            "Actions": [
+              {
+                "ActionTypeId": {
+                  "Category": "Build",
+                  "Owner": "AWS",
+                  "Provider": "CodeBuild",
+                  "Version": "1"
+                },
+                "Configuration": {
+                  "ProjectName": {
+                    "Ref": "rApplicationCodeBuildProd"
+                  }
+                },
+                "InputArtifacts": [
+                  {
+                    "Name": "AppSource"
+                  }
+                ],
+                "Name": "SetupTarget",
+                "RunOrder": 1
+              }
+            ],
+            "Name": "PreCDC"
+          }
+        ]
+      }
+    },
+    "rAppPipelineRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "sts:AssumeRole"
+              ],
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "codepipeline.amazonaws.com"
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Policies": [
+          {
+            "PolicyName": {
+              "Fn::Sub": "codepipeline-${AWS::StackName}-${AWS::Region}-policy"
+            },
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": [
+                    "s3:*",
+                    "sns:*",
+                    "sqs:*"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": "*"
+                },
+                {
+                  "Action": [
+                    "codebuild:BatchGetBuilds",
+                    "codebuild:StartBuild"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "rApplicationCodeBuild": {
+      "Type": "AWS::CodeBuild::Project",
+      "Properties": {
+        "Artifacts": {
+          "Type": "CODEPIPELINE"
+        },
+        "Description": "A description about my project",
+        "Environment": {
+          "ComputeType": "BUILD_GENERAL1_SMALL",
+          "EnvironmentVariables": [
+            {
+              "Name": "PGPASSWORD",
+              "Type": "PARAMETER_STORE",
+              "Value": {
+                "Ref": "rApplicationpRdsPassword"
+              }
+            },
+            {
+              "Name": "DB_NAME",
+              "Type": "PLAINTEXT",
+              "Value": {
+                "Ref": "pRDSName"
+              }
+            },
+            {
+              "Name": "TARGET_ENDPOINT",
+              "Type": "PLAINTEXT",
+              "Value": {
+                "Ref": "pRDSEndpoint"
+              }
+            },
+            {
+              "Name": "DB_USER",
+              "Type": "PLAINTEXT",
+              "Value": {
+                "Ref": "pRDSUser"
+              }
+            },
+            {
+              "Name": "TASK_NAME",
+              "Type": "PLAINTEXT",
+              "Value": {
+                "Ref": "pTaskName"
+              }
+            },
+            {
+              "Name": "SOURCE_ENDPOINT_ARN",
+              "Type": "PLAINTEXT",
+              "Value": {
+                "Ref": "pDmsSourceArn"
+              }
+            },
+            {
+              "Name": "TARGET_ENDPOINT_ARN",
+              "Type": "PLAINTEXT",
+              "Value": {
+                "Ref": "pDmsTargetArn"
+              }
+            },
+            {
+              "Name": "REPLICATION_INSTANCE_ARN",
+              "Type": "PLAINTEXT",
+              "Value": {
+                "Ref": "pDmsReplicationArn"
+              }
+            },
+            {
+              "Name": "SNS_TOPIC",
+              "Type": "PLAINTEXT",
+              "Value": {
+                "Ref": "rSnsApproval"
+              }
+            },
+            {
+              "Name": "NOTIFY_SNS",
+              "Type": "PLAINTEXT",
+              "Value": {
+                "Ref": "rMigNotify"
+              }
+            }
+          ],
+          "Image": "aws/codebuild/ubuntu-base:14.04",
+          "Type": "LINUX_CONTAINER"
+        },
+        "Name": {
+          "Fn::Sub": "Codebuild-${AWS::StackName}-setupTarget"
+        },
+        "ServiceRole": {
+          "Fn::GetAtt": [
+            "rCodeBuildServiceRole",
+            "Arn"
+          ]
+        },
+        "Source": {
+          "BuildSpec": "setup-target-schema.yml",
+          "Type": "CODEPIPELINE"
+        },
+        "Tags": [
+          {
+            "Key": "Key1",
+            "Value": "Value1"
+          },
+          {
+            "Key": "Key2",
+            "Value": "Value2"
+          }
+        ],
+        "TimeoutInMinutes": 60,
+        "VpcConfig": {
+          "SecurityGroupIds": [
+            {
+              "Ref": "pCodeBuildSecurityGroup"
+            }
+          ],
+          "Subnets": [
+            {
+              "Ref": "pCodeBuildSubnet"
+            }
+          ],
+          "VpcId": {
+            "Ref": "pCodeBuildVPC"
+          }
+        }
+      }
+    },
+    "rApplicationCodeBuildProd": {
+      "Type": "AWS::CodeBuild::Project",
+      "Properties": {
+        "Artifacts": {
+          "Type": "CODEPIPELINE"
+        },
+        "Description": "DMS project to run before Change Data Capture (CDC) starts",
+        "Environment": {
+          "ComputeType": "BUILD_GENERAL1_SMALL",
+          "EnvironmentVariables": [
+            {
+              "Name": "PGPASSWORD",
+              "Type": "PARAMETER_STORE",
+              "Value": {
+                "Ref": "rApplicationpRdsPassword"
+              }
+            },
+            {
+              "Name": "DB_NAME",
+              "Type": "PLAINTEXT",
+              "Value": {
+                "Ref": "pRDSName"
+              }
+            },
+            {
+              "Name": "TARGET_ENDPOINT",
+              "Type": "PLAINTEXT",
+              "Value": {
+                "Ref": "pRDSEndpoint"
+              }
+            },
+            {
+              "Name": "DB_USER",
+              "Type": "PLAINTEXT",
+              "Value": {
+                "Ref": "pRDSUser"
+              }
+            },
+            {
+              "Name": "NOTIFY_SNS",
+              "Type": "PLAINTEXT",
+              "Value": {
+                "Ref": "rMigNotify"
+              }
+            },
+            {
+              "Name": "TASK_NAME",
+              "Type": "PLAINTEXT",
+              "Value": {
+                "Ref": "pTaskName"
+              }
+            }
+          ],
+          "Image": "aws/codebuild/ubuntu-base:14.04",
+          "Type": "LINUX_CONTAINER"
+        },
+        "Name": {
+          "Fn::Sub": "Codebuild-${AWS::StackName}-preCDC"
+        },
+        "ServiceRole": {
+          "Fn::GetAtt": [
+            "rCodeBuildServiceRole",
+            "Arn"
+          ]
+        },
+        "Source": {
+          "Type": "CODEPIPELINE",
+          "BuildSpec": "pre-CDC-build.yml"
+        },
+        "Tags": [
+          {
+            "Key": "Key1",
+            "Value": "Value1"
+          },
+          {
+            "Key": "Key2",
+            "Value": "Value2"
+          }
+        ],
+        "TimeoutInMinutes": 10,
+        "VpcConfig": {
+          "SecurityGroupIds": [
+            {
+              "Ref": "pCodeBuildSecurityGroup"
+            }
+          ],
+          "Subnets": [
+            {
+              "Ref": "pCodeBuildSubnet"
+            }
+          ],
+          "VpcId": {
+            "Ref": "pCodeBuildVPC"
+          }
+        }
+      }
+    },
+    "rApplicationpRdsPassword": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Description": "SSM Parameter for RDS Password.",
+        "Name": {
+          "Fn::Sub": "DMS-${AWS::StackName}"
+        },
+        "Type": "String",
+        "Value": {
+          "Ref": "pRDSPassword"
+        }
+      }
+    },
+    "rCodeBuildServiceRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "sts:AssumeRole"
+              ],
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "codebuild.amazonaws.com"
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Policies": [
+          {
+            "PolicyName": {
+              "Fn::Sub": "Codebuild-${AWS::StackName}-${AWS::Region}-policy"
+            },
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": [
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/Codebuild-${AWS::StackName}*"
+                    }
+                  ]
+                },
+                {
+                  "Action": [
+                    "s3:PutObject",
+                    "s3:GetObject",
+                    "s3:GetBucketVersioning",
+                    "s3:GetObjectVersion"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:aws:s3:::${rArtifactStoreS3Location}*"
+                    }
+                  ]
+                },
+                {
+                  "Action": [
+                    "dms:StartReplicationTask",
+                    "dms:CreateReplicationTask",
+                    "dms:CreateEventSubscription",
+                    "dms:Describe*"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": "*"
+                },
+                {
+                  "Action": "ssm:GetParameters",
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::Sub": "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${rApplicationpRdsPassword}"
+                  }
+                },
+                {
+                  "Action": [
+                    "sns:GetTopicAttributes",
+                    "sns:Subscribe"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Ref": "rSnsApproval"
+                  }
+                },
+                {
+                  "Action": [
+                    "sns:Publish"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Ref": "rMigNotify"
+                  }
+                },
+                {
+                  "Action": [
+                    "ec2:CreateNetworkInterface",
+                    "ec2:DescribeDhcpOptions",
+                    "ec2:DescribeNetworkInterfaces",
+                    "ec2:DeleteNetworkInterface",
+                    "ec2:DescribeSubnets",
+                    "ec2:DescribeSecurityGroups",
+                    "ec2:DescribeVpcs"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": "*"
+                },
+                {
+                  "Action": [
+                    "ec2:CreateNetworkInterfacePermission"
+                  ],
+                  "Condition": {
+                    "StringEquals": {
+                      "ec2:AuthorizedService": "codebuild.amazonaws.com",
+                      "ec2:Subnet": [
+                        {
+                          "Fn::Sub": "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${pCodeBuildSubnet}"
+                        }
+                      ]
+                    }
+                  },
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::Sub": "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*"
+                  }
+                }
+              ],
+              "Version": "2012-10-17"
+            }
+          }
+        ]
+      }
+    },
+    "rArtifactStoreS3Location": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Solution",
+            "Value": {
+              "Fn::Sub": "Artifact store for - ${AWS::StackName}"
+            }
+          }
+        ],
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        }
+      }
+    },
+    "rSnsApproval": {
+      "Type": "AWS::SNS::Topic"
+    },
+    "rApplicationCodepipelineToken": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Description": "SSM Parameter for CodePipeline token.",
+        "Name": {
+          "Fn::Sub": "pCodePipelineToken-${AWS::StackName}"
+        },
+        "Type": "String",
+        "Value": "default"
+      }
+    },
+    "rApplicationLambdaRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "sts:AssumeRole"
+              ],
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "lambda.amazonaws.com"
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+        ],
+        "Policies": [
+          {
+            "PolicyName": {
+              "Fn::Sub": "lambda-${AWS::StackName}-${AWS::Region}-policy"
+            },
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": "codepipeline:PutApprovalResult",
+                  "Effect": "Allow",
+                  "Resource": "*"
+                },
+                {
+                  "Action": [
+                    "sns:Publish"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Ref": "rMigNotify"
+                  }
+                },
+                {
+                  "Action": [
+                    "ssm:GetParameter",
+                    "ssm:PutParameter"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::Sub": "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${rApplicationCodepipelineToken}"
+                  }
+                }
+              ],
+              "Version": "2012-10-17"
+            }
+          }
+        ]
+      }
+    },
+    "rApplicationLambdaFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "ZipFile": {
+            "Fn::Join": [
+              "\n",
+              [
+                "import boto3",
+                "import json",
+                "import os",
+                "ssm = boto3.client('ssm')",
+                "sns = boto3.client('sns')",
+                "codepipeline = boto3.client('codepipeline')",
+                "ssm_parameter = os.environ['codepipeline_token']",
+                "pipeline_name = os.environ['pipeline_name']",
+                "task_name = os.environ['dms_task']",
+                "topic = os.environ['notify_topic']",
+                "def lambda_handler(event, context): ",
+                "    print(event)",
+                "    str_subject = event['Records'][0]['Sns']['Subject']",
+                "    if 'APPROVAL NEEDED' in str_subject:",
+                "        print('This is a Codepipeline approval action')",
+                "        str_sns = event['Records'][0]['Sns']['Message']",
+                "        sns_msg = json.loads(str_sns)",
+                "        pipeline = sns_msg['approval']['pipelineName']",
+                "        stage = sns_msg['approval']['stageName']",
+                "        action = sns_msg['approval']['actionName']",
+                "        token = sns_msg['approval']['token']",
+                "        approve_param =\"pipelineName='%s',stageName='%s',actionName='%s',token='%s'\" % ( pipeline , stage , action , token)",
+                "        print(approve_param)",
+                "        response = ssm.put_parameter(Name=ssm_parameter,",
+                "            Value=approve_param,",
+                "            Type='String',",
+                "            Overwrite=True",
+                "            )",
+                "    elif 'DMS' in str_subject:",
+                "        print('This is a message from DMS')",
+                "        str_sns = event['Records'][0]['Sns']['Message']",
+                "        if 'attempt' in str_sns:",
+                "            print(str_sns)",
+                "            print('Event notification nothing will be done')",
+                "        else:",
+                "            sns_msg = json.loads(str_sns)",
+                "            print(sns_msg['Event Message'])",
+                "            dms_status = sns_msg['Event Message']",
+                "            if 'STOPPED_AFTER_FULL_LOAD' in dms_status:",
+                "                print('DMS task replication is stopped after full load, proceeding to put an approval in Codepipeline')",
+                "                result_pipeline('Approved')",
+                "            elif 'started' in dms_status:",
+                "                print('Lambda will do nothing at this step as the task is started')",
+                "            elif 'Create' in dms_status:",
+                "                print('Lambda will do nothing at this step as the task is created')",
+                "            elif 'FAIL' in dms_status.upper():",
+                "                status = 'DMS task failed. Please check the task'",
+                "                print(status)",
+                "                subj = 'Status Update on DMS Task ' + os.environ['dms_task']",
+                "                sns.publish(TopicArn = topic, Message = status, Subject = subj)",
+                "                result_pipeline('Rejected')",
+                "            else:",
+                "                status = 'DMS task did not stop or errored out after full load. Please check the task'",
+                "                print(status)",
+                "                subj = 'Status Update on DMS Task ' + os.environ['dms_task']",
+                "                sns.publish(TopicArn = topic, Message = status, Subject = subj)",
+                "                result_pipeline('Rejected')",
+                "          ",
+                "    else:",
+                "        print('This message is from neither Codepipeline Approval or DMS event. Nothing will be done')",
+                "            ",
+                "    ",
+                "def result_pipeline(event):",
+                "    print('Getting Codepipeline parameters from SSM to put a %s' %(event))",
+                "    codepipeline_params = ssm.get_parameter(Name=ssm_parameter)['Parameter']['Value'].split(\"'\")",
+                "    print(codepipeline_params)",
+                "    result_reponse = codepipeline.put_approval_result(",
+                "        pipelineName=codepipeline_params[1],",
+                "        stageName=codepipeline_params[3],",
+                "        actionName=codepipeline_params[5],",
+                "        result={",
+                "            'summary': event,",
+                "            'status': event",
+                "        },",
+                "        token=codepipeline_params[7]",
+                "    )",
+                "    print(result_reponse)",
+                ""
+              ]
+            ]
+          }
+        },
+        "Environment": {
+          "Variables": {
+            "codepipeline_token": {
+              "Ref": "rApplicationCodepipelineToken"
+            },
+            "pipeline_name": {
+              "Ref": "rAppPipeline"
+            },
+            "dms_task":{
+              "Ref":"pTaskName"
+            },
+            "notify_topic":{
+              "Ref":"rMigNotify"
+            }
+          }
+        },
+        "Handler": "index.lambda_handler",
+        "Runtime": "python3.6",
+        "Role": {
+          "Fn::GetAtt": [
+            "rApplicationLambdaRole",
+            "Arn"
+          ]
+        },
+        "Timeout": 300
+      }
+    },
+    "rCheckDmsEndpointStatus": {
+      "Type": "Custom::rCheckDmsEndpointStatus",
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "rCheckDmsEndpointStatusFunction",
+            "Arn"
+          ]
+        },
+        "ReplicationInstanceArn": {
+          "Ref": "pDmsReplicationArn"
+        },
+        "SourceArn": {
+          "Ref": "pDmsSourceArn"
+        },
+        "TargetArn": {
+          "Ref": "pDmsTargetArn"
+        }
+      }
+    },
+    "rCheckDmsEndpointStatusRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "sts:AssumeRole"
+              ],
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "lambda.amazonaws.com"
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+        ],
+        "Policies": [
+          {
+            "PolicyName": {
+              "Fn::Sub": "CheckDMS-${AWS::StackName}-${AWS::Region}-policy"
+            },
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": "dms:DescribeConnections",
+                  "Effect": "Allow",
+                  "Resource": "*"
+                }
+              ],
+              "Version": "2012-10-17"
+            }
+          }
+        ]
+      }
+    },
+    "rCheckDmsEndpointStatusFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Handler": "index.lambda_handler",
+        "Runtime": "python3.6",
+        "Role": {
+          "Fn::GetAtt": [
+            "rCheckDmsEndpointStatusRole",
+            "Arn"
+          ]
+        },
+        "Timeout": 300,
+        "Code": {
+          "ZipFile": {
+            "Fn::Join": [
+              "\n",
+              [
+                "import boto3 ",
+                "import json ",
+                "import cfnresponse ",
+                "",
+                "def lambda_handler(event, context):  ",
+                "   rep_arn = event['ResourceProperties']['ReplicationInstanceArn'] ",
+                "   source_arn = event['ResourceProperties']['SourceArn'] ",
+                "   target_arn = event['ResourceProperties']['TargetArn'] ",
+                "   responseData = {} ",
+                "",
+                "   try: ",
+                "       if event['RequestType'] == 'Delete': ",
+                "           print('Nothing will be done on DeleteStack call') ",
+                "       else: ",
+                "           print('This is a %s event' %(event['RequestType'])) ",
+                "           source_status = dms_status(source_arn,rep_arn) ",
+                "           target_status = dms_status(target_arn,rep_arn) ",
+                "           if 'successful' in source_status: ",
+                "               print('Source endpoint was successfully tested') ",
+                "               if 'successful' in target_status: ",
+                "                   print('Target endpoint was successfully tested') ",
+                "               else: ",
+                "                   print('Target endpoint was not tested. Please test connection with replication instance') ",
+                "           else: ",
+                "               print('Source endpoint was not tested. Please test connection with replication instance.') ",
+                "       cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, '') ",
+                "   except Exception as e: ",
+                "       print(e) ",
+                "       cfnresponse.send(event, context, cfnresponse.FAILURE, {}, '')",
+                "",
+                "def dms_status(endpoint, rep_inst):",
+                "    try:",
+                "        dms_client = boto3.client('dms')",
+                "        response = dms_client.describe_connections(",
+                "        Filters=[",
+                "            {",
+                "                'Name': 'endpoint-arn',",
+                "                'Values': [endpoint]",
+                "            },",
+                "            {",
+                "                'Name': 'replication-instance-arn',",
+                "                'Values': [rep_inst]",
+                "            }",
+                "            ]",
+                "        )",
+                "        e = response['Connections'][0]['Status']",
+                "    except Exception as e:",
+                "        print('Error occured with replication instance: %s and endpoint: %s' %(endpoint,rep_inst))",
+                "        print ('Exception is %s' %(e))",
+                "    return e",
+                ""
+              ]
+            ]
+          }
+        }
+      }
+    },
+    "rLambdaPermissionGrantSNS": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "rApplicationLambdaFunction",
+            "Arn"
+          ]
+        },
+        "Action": "lambda:InvokeFunction",
+        "Principal": "sns.amazonaws.com",
+        "SourceArn": {
+          "Ref": "rSnsApproval"
+        }
+      }
+    },
+    "rSnsSubscription": {
+      "Type": "AWS::SNS::Subscription",
+      "Properties": {
+        "Protocol": "lambda",
+        "Endpoint": {
+          "Fn::GetAtt": [
+            "rApplicationLambdaFunction",
+            "Arn"
+          ]
+        },
+        "TopicArn": {
+          "Ref": "rSnsApproval"
+        }
+      }
+    },
+    "rSnsTopicPolicy": {
+      "Type": "AWS::SNS::TopicPolicy",
+      "Properties": {
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Id": "__default_policy_ID",
+          "Statement": [
+            {
+              "Sid": {
+                "Fn::Sub": "SNS-${AWS::StackName}-${AWS::Region}-policy"
+              },
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": "*"
+              },
+              "Action": [
+                "SNS:GetTopicAttributes",
+                "SNS:SetTopicAttributes",
+                "SNS:AddPermission",
+                "SNS:RemovePermission",
+                "SNS:DeleteTopic",
+                "SNS:Subscribe",
+                "SNS:ListSubscriptionsByTopic",
+                "SNS:Publish",
+                "SNS:Receive"
+              ],
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "AWS:SourceOwner": {
+                    "Ref": "AWS::AccountId"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "dms-allow-publish",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "dms.amazonaws.com"
+              },
+              "Action": "sns:Publish",
+              "Resource": {
+                "Ref": "rSnsApproval"
+              }
+            }
+          ]
+        },
+        "Topics": [
+          {
+            "Ref": "rSnsApproval"
+          }
+        ]
+      }
+    },
+    "rArtifactStoreCleanUp": {
+      "Type": "Custom::rS3CleanUp",
+      "Properties": {
+        "DestBucket": {
+          "Ref": "rArtifactStoreS3Location"
+        },
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "rS3CleanUpFunction",
+            "Arn"
+          ]
+        }
+      }
+    },
+    "rS3CleanUpRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              }
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+        ],
+        "Path": "/",
+        "Policies": [
+          {
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": [
+                    "s3:PutObject",
+                    "s3:DeleteObject",
+                    "s3:GetObject",
+                    "s3:ListBucket",
+                    "s3:ListBucketVersions",
+                    "s3:DeleteObjectVersion",
+                    "s3:GetObjectVersion",
+                    "s3:GetBucketVersioning"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": {
+                    "Fn::Sub": "arn:aws:s3:::${rArtifactStoreS3Location}*"
+                  }
+                }
+              ],
+              "Version": "2012-10-17"
+            },
+            "PolicyName": {
+              "Fn::Sub": "${AWS::StackName}-${AWS::Region}-rS3CleanUpPolicy"
+            }
+          }
+        ],
+        "RoleName": {
+          "Fn::Sub": "${AWS::StackName}-${AWS::Region}-rS3CleanUpRole"
+        }
+      }
+    },
+    "rS3CleanUpFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Description": "Empty the S3 Buckets while deleting the Stack",
+        "Handler": "index.lambda_handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "rS3CleanUpRole",
+            "Arn"
+          ]
+        },
+        "Runtime": "python3.6",
+        "Timeout": 240,
+        "Code": {
+          "ZipFile": {
+            "Fn::Join": [
+              "\n",
+              [
+                "import boto3",
+                "import cfnresponse",
+                "import json",
+                "",
+                "def lambda_handler(event, context):",
+                "",
+                "",
+                "    try:",
+                "       ",
+                "        bucketcfn=event['ResourceProperties']['DestBucket']",
+                "        responseData = {}",
+                "",
+                "        if event['RequestType'] == 'Create': ",
+                "            print('Create stack operation nothing will be done') ",
+                "            print(bucketcfn)      ",
+                "",
+                "        elif event['RequestType'] == 'Delete':",
+                "            s3 = boto3.resource('s3')",
+                "            bucket = s3.Bucket(bucketcfn)",
+                "            bucket.object_versions.all().delete()",
+                "            print('Delete stack in progress the bucket is emptied')",
+                "",
+                "        elif event['RequestType'] == 'Update':",
+                "            print('Update stack')",
+                "",
+                "        cfnresponse.send(event, context, cfnresponse.SUCCESS, {}, '')",
+                "",
+                "    except Exception as e:",
+                "        print(e)",
+                "        cfnresponse.send(event, context, cfnresponse.FAILURE, {}, '')",
+                ""
+              ]
+            ]
+          }
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "oApplicationPipeline": {
+      "Description": "Pipeline for DMS tasks",
+      "Value": {
+        "Ref": "rAppPipeline"
+      }
+    },
+    "oAppPipelineRole": {
+      "Description": "IAM Role used by CodePipeline",
+      "Value": {
+        "Ref": "rAppPipelineRole"
+      }
+    },
+    "oSnsTopicPolicy": {
+      "Description": "SNS Topic Policy for DMS and CodePipeline Events",
+      "Value": {
+        "Ref": "rSnsTopicPolicy"
+      }
+    },
+    "oSnsSubscription": {
+      "Description": "SNS Subscription to Lambda function",
+      "Value": {
+        "Ref": "rSnsSubscription"
+      }
+    },
+    "oApplicationLambdaFunction": {
+      "Description": "Lambda function for Approval Stage",
+      "Value": {
+        "Ref": "rApplicationLambdaFunction"
+      }
+    },
+    "oApplicationLambdaRole": {
+      "Description": "IAM role used by Lambda function",
+      "Value": {
+        "Ref": "rApplicationLambdaRole"
+      }
+    },
+    "oApplicationCodepipelineToken": {
+      "Description": "Execution token for Codepipeline Approval stage",
+      "Value": {
+        "Ref": "rApplicationCodepipelineToken"
+      }
+    },
+    "oSnsApproval": {
+      "Description": "SNS Topic for DMS and CodePipeline events",
+      "Value": {
+        "Ref": "rSnsApproval"
+      }
+    },
+    "oArtifactStoreS3Location": {
+      "Description": "S3 bucket for Codepipeline artifacts",
+      "Value": {
+        "Ref": "rArtifactStoreS3Location"
+      }
+    },
+    "oCodeBuildServiceRole": {
+      "Description": "CodeBuild service role",
+      "Value": {
+        "Ref": "rCodeBuildServiceRole"
+      }
+    },
+    "oApplicationCodeBuildProd": {
+      "Description": "PreCDC CodeBuild Project",
+      "Value": {
+        "Ref": "rApplicationCodeBuildProd"
+      }
+    },
+    "oApplicationCodeBuild": {
+      "Description": "SetupTarget CodeBuild Project",
+      "Value": {
+        "Ref": "rApplicationCodeBuild"
+      }
+    }
+  }
+}

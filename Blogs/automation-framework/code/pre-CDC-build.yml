@@ -1,0 +1,36 @@
+version: 0.2
+phases:
+  install:
+    commands:
+      - apt-get update -y
+      - apt-get install postgresql-client -y
+      - pip install --upgrade awscli
+  build:
+    commands:
+      - echo Entered the build phase...
+      - echo Build started on `date`
+      - echo Getting DMS task status
+      - status=`aws dms describe-replication-tasks --filters Name=replication-task-id,Values=$TASK_NAME --query 'ReplicationTasks[0].Status' --output text`
+      - echo $status
+      - reason=`aws dms describe-replication-tasks --filters Name=replication-task-id,Values=$TASK_NAME --query 'ReplicationTasks[0].StopReason' --output text`
+      - echo $reason
+      - |
+        if ( echo $status | grep stopped ); then
+          echo Task is in stopped state
+        else
+          echo Task is not in stopped state
+          exit 1
+        fi
+      - |
+        if (echo $reason | grep STOPPED_AFTER_FULL_LOAD ); then
+          echo Task is stopped after full load
+        else
+          echo Task was not stopped after full load
+          exit 1
+        fi
+      - echo Creating pre CDC objects in target database
+      - psql -h $TARGET_ENDPOINT -U $DB_USER -d $DB_NAME -c "\i preCDC-script.sql"
+      - replication_task_arn=`aws dms describe-replication-tasks --filters Name=replication-task-id,Values=$TASK_NAME --query 'ReplicationTasks[0].ReplicationTaskArn' --output text`
+      - aws dms start-replication-task --replication-task-arn $replication_task_arn --start-replication-task-type resume-processing
+      - aws dms wait replication-task-running --filters Name=replication-task-arn,Values=$replication_task_arn
+      - aws sns publish --topic-arn $NOTIFY_SNS --message "DMS Replication Task resumed successfully" --subject "Status Update $TASK_NAME"

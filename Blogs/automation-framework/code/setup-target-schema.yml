@@ -1,0 +1,20 @@
+version: 0.2
+phases:
+  install:
+    commands:
+      - apt-get update -y
+      - pip install --upgrade pip
+      - pip install --upgrade awscli
+      - apt-get install postgresql-client -y
+  build:
+    commands:
+      - echo Entered the build phase...
+      - echo Build started on `date`
+      - echo Creating empty schema in target database
+      - psql -h $TARGET_ENDPOINT -U $DB_USER -d $DB_NAME -c "\i create-empty-schema.sql"
+
+      - aws dms create-replication-task --source-endpoint-arn $SOURCE_ENDPOINT_ARN --target-endpoint-arn $TARGET_ENDPOINT_ARN --replication-instance-arn $REPLICATION_INSTANCE_ARN --table-mappings file://table-mappings.json --replication-task-settings file://task-settings01.json --replication-task-identifier $TASK_NAME --migration-type full-load-and-cdc
+      - replication_task_arn=`aws dms describe-replication-tasks --filters Name=replication-task-id,Values=$TASK_NAME --query 'ReplicationTasks[0].ReplicationTaskArn' --output text`
+      - aws dms wait replication-task-ready --filters Name=replication-task-arn,Values=$replication_task_arn
+      - aws dms create-event-subscription --subscription-name $TASK_NAME --sns-topic-arn $SNS_TOPIC --event-categories "state change" "failure" --source-type replication-task --source-ids $TASK_NAME
+      - aws dms start-replication-task --replication-task-arn $replication_task_arn --start-replication-task-type start-replication
