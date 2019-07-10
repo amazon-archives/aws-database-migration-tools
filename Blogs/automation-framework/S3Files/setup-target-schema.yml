@@ -10,6 +10,7 @@ phases:
     commands:
       - echo Entered the build phase...
       - echo Build started on `date`
+      - psql -h $TARGET_ENDPOINT -U $DB_USER -d $DB_NAME -c "drop schema if exists dms_sample cascade"
 #      - echo Creating empty schema in target database
 #      - psql -h $TARGET_ENDPOINT -U $DB_USER -d $DB_NAME -c "\i create-empty-schema.sql"
 
