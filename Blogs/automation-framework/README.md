@@ -1,4 +1,4 @@
-# Automation Framework for AWS Database Migration Services 
+# Automation Framework for AWS Database Migration Service
 
 This code allows you to create an automated framework to migrate relational databases.
 
