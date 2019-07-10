@@ -1,0 +1,9 @@
+{
+    "FullLoadSettings": {
+        "TargetTablePrepMode": "TRUNCATE_BEFORE_LOAD",
+        "StopTaskCachedChangesNotApplied": true
+        },
+    "Logging": {
+        "EnableLogging": true
+    }
+}

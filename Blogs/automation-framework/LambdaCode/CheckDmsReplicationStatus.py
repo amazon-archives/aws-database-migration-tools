@@ -1,3 +1,27 @@
+"""
+Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+Permission is hereby granted, free of charge, to any person obtaining a copy of this
+software and associated documentation files (the "Software"), to deal in the Software
+without restriction, including without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Information Block.
+
+Checks the messages from SNS to see if its from DMS or CodePipeline
+If CodePipeline it retrieves execution token and stores in SSM parameter store
+If DMS then based on task status approves or rejects the pipeline
+API Triggers: Lambda invoke Custom Resource
+Services: DMS, CodePipeline, SNS
+Python 3.6 - AWS Lambda - Last Modified 07/01/2019
+"""
 import boto3
 import json
 import os
@@ -8,7 +32,7 @@ ssm_parameter = os.environ['codepipeline_token']
 pipeline_name = os.environ['pipeline_name']
 task_name = os.environ['dms_task']
 topic = os.environ['notify_topic']
-def lambda_handler(event, context): 
+def lambda_handler(event, context):
     print(event)
     str_subject = event['Records'][0]['Sns']['Subject']
     if 'APPROVAL NEEDED' in str_subject:
@@ -55,11 +79,11 @@ def lambda_handler(event, context):
                 subj = 'Status Update on DMS Task ' + os.environ['dms_task']
                 sns.publish(TopicArn = topic, Message = status, Subject = subj)
                 result_pipeline('Rejected')
-          
+
     else:
         print('This message is from neither Codepipeline Approval or DMS event. Nothing will be done')
-            
-    
+
+
 def result_pipeline(event):
     print('Getting Codepipeline parameters from SSM to put a %s' %(event))
     codepipeline_params = ssm.get_parameter(Name=ssm_parameter)['Parameter']['Value'].split("'")
@@ -75,4 +99,3 @@ def result_pipeline(event):
         token=codepipeline_params[7]
     )
     print(result_reponse)
-
