@@ -52,4 +52,4 @@ aws dms describe-connections --filters Name=endpoint-arn,Values=$(aws dms descri
 8. Upload the S3Files/test.zip to an S3 bucket
 9. Launch the template at CloudFormationTemplate/automation-migration.yml using the security group, replication arn and endpoints arns that you created above.
 
-To further confgure this you can change the S3Files/setup*yml to change the actions in SetupTarget Stage and S3Files/pre*yml to change actions in the pre-CDC state.
+To further confgure this you can change the S3Files/setup-target-schema.yml to change the actions in SetupTarget Stage and S3Files/pre-CDC-build.yml to change actions in the pre-CDC state.
