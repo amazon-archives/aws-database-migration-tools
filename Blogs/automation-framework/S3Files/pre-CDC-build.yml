@@ -29,6 +29,7 @@ phases:
           exit 1
         fi
       - echo Creating pre CDC objects in target database
+      - psql -h $TARGET_ENDPOINT -U $DB_USER -d $DB_NAME -c "\i generate_seq.sql" | tail -n+2 > target-seq.sql
       - psql -h $TARGET_ENDPOINT -U $DB_USER -d $DB_NAME -c "\i preCDC-script.sql"
       - replication_task_arn=`aws dms describe-replication-tasks --filters Name=replication-task-id,Values=$TASK_NAME --query 'ReplicationTasks[0].ReplicationTaskArn' --output text`
       - aws dms start-replication-task --replication-task-arn $replication_task_arn --start-replication-task-type resume-processing
