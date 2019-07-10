@@ -32,6 +32,3 @@ aws dms describe-connections --filters Name=endpoint-arn,Values=$(aws dms descri
 
 8. Upload the S3Files/test.zip to an S3 bucket
 9. Launch the template at CloudFormationTemplate/automation-migration.yml
-
-
-$DB_USER/$DB_PASSWORD@$DB_HOST/$DB_NAME
