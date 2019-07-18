@@ -10,17 +10,17 @@ Example:
 Lets assume folder location "/Users/TestUser/CSV_Files_For_DMS" contains two files named include_tables.csv and exclude_tables.csv.
 
 The content of include_tables.csv is:
-HR,EMPLOYEES
-HR,DEPARTMENTS
-HR,JOBS
-HR,LOCATIONS
+HR,EMPLOYEES 
+HR,DEPARTMENTS 
+HR,JOBS 
+HR,LOCATIONS 
 HR,REGIONS
 
 The content of exclude_tables.csv is:
-HR,EMPLOYEES_CHG_LOG
-HR,DEPARTMENTS_TEMP
-HR,JOBS_HISTORY
-HR,LOCATIONS_ARCHIVE
+HR,EMPLOYEES_CHG_LOG 
+HR,DEPARTMENTS_TEMP 
+HR,JOBS_HISTORY 
+HR,LOCATIONS_ARCHIVE 
 HR,REGIONS_BACKUP
 
 When you run this python program, provide the input as "/Users/TestUser/CSV_Files_For_DMS" when asked for the folder location.
