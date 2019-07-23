@@ -9,7 +9,7 @@ Example:
 
 Lets assume folder location "/Users/TestUser/CSV_Files_For_DMS" contains two files named include_tables.csv and exclude_tables.csv.
 
-The content of include_tables.csv is:
+The content of include_tables.csv is:  
 HR,EMPLOYEES  
 HR,DEPARTMENTS   
 HR,JOBS  
