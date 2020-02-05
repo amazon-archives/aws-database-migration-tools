@@ -4,13 +4,13 @@ This step-by-step guide demonstrates how you can use [AWS Database Migration Ser
 
 # Connecting to your Environment 
 
-Before proceeding further, make sure you have completed the instructions in the [Enviornment Configuraiton][env-config] step to deploy the resources we will be using for this database migration in your own account. These resources include:
+Before proceeding further, make sure you have completed the instructions in the [Environment Configuration][env-config] step to deploy the resources we will be using for this database migration in your own account. These resources include:
 
 - An [Amazon Elastic Compute Cloud (Amazon EC2)][ec2] instance to run the AWS Schema Conversion Tool (AWS SCT), Microsoft SQL Server Management Studio, and MySQL Workbench.
 -	An Amazon RDS Instance used to host the source Oracle database. 
 - An AWS RDS Aurora (PostgreSQL) instance used as the target database.
 
-Once you have completed the instructions in the [Enviornment Configuraiton][env-config] step, take special note of the following output values: 
+Once you have completed the instructions in the [Environment Configuration][env-config] step, take special note of the following output values: 
 
 - SourceEC2PublicDNS
 - TargetAuroraMySQLEndpoint
@@ -18,28 +18,33 @@ Once you have completed the instructions in the [Enviornment Configuraiton][env-
 
 # Part 1: Converting Database Schema Using the AWS Schema Conversion Tool (AWS SCT)
 
-The AWS Schema Conversion Tool is a [downloadable][download-sct] application that enables you to convert your existing database schema from one database engine to another. You can convert relational OLTP schemas, data warehouse OLAP schemas, and document-based NoSQL database schemas. AWS SCT specifically eases the transition from one database engine to another.
+The AWS Schema Conversion Tool is a [downloadable][download-sct] application that enables you to convert your existing database schema from one database engine to another. You can convert relational OLTP schemas, data warehouse OLAP schemas, and document-based NoSQL database schemas. AWS SCT specifically eases the transition from one database engine to another. In addition, it can move your table DDL, views, and stored procedure DML to a different platform. The tool generates an assessment report which lists the objects that can be automatically converted and recommends manual changes were needed.
 
-The following steps provide instructions for converting an Oracle database to an Amazon Aurora PostgreSQL database. In this exercise, you perform the following tasks:
-- [Log on the Windows EC2 Instance](#log-on-the-windows-ec2-instance)
+The following steps provide instructions for converting an Oracle database to an Amazon Aurora PostgreSQL database. Additionally, you will observe how AWS SCT helps you spot the differences between the two dialects; and, provides you with tips about how you can modify procedural code when needed to successfully migrate all database objects. 
+
+In this exercise, you perform the following tasks:
+- [Log into the Windows EC2 Instance](#log-into-the-windows-ec2-instance)
 - [Install the Schema Conversion Tool on the Server](#install-the-schema-conversion-tool-on-the-server)
 - [Create a Database Migration Project in the SCT](#create-a-database-migration-project)
 - [Convert the schema using the SCT](#convert-the-schema)
 - [Modify Procedural Code to Adapt It For the New Database Dialect](#modify-procedural-code-to-adapt-it-for-the-new-database-dialect)
 
-## Log on the Windows EC2 Instance
+## Log into the Windows EC2 Instance
 1.	Go to the AWS EC2 [console][ec2-console] and click on **Instances** in the left column.
 2.	Select the instance with the name **\<StackName\>-EC2Instance** and then click the Connect button. 
 
 ![\[SqlSct01\]](img/SqlSct01.png)
 
-3. In this step, you perform 3 tasks:
+3. In this step, you retrieve the EC2 administrator password in order to RDP into the instnace:
 
-    1. Click the **Get Password** button and upload the **Key Pair** file that you downloaded earlier. Please take note of the EC2 console generated administrator password.
-    2. Click on **Download Remote Desktop File** to download the RDP file to access this EC2 instance. 
-    3. Connect to the EC2 instance using the RDP.
-    
-![\[SqlSct02\]](img/SqlSct02.png)
+    1. Click the **Get Password** button.
+    ![\[SqlSct02\]](img/SqlSct02.png)
+    2. Upload the **Key Pair** file that you downloaded earlier.
+    3. Click on **Decrypt Password**.
+    ![\[SqlSct02-b\]](img/SqlSct02-b.png)
+    4. Take note of the EC2 console generated administrator password.
+    5. Click on **Download Remote Desktop File** to download the RDP file to access this EC2 instance. 
+    6. Connect to the EC2 instance using an RDP client.
 
 ## Install the Schema Conversion Tool on the server
 Now that you are connected to the source SQL Server (the EC2 instance), you are going to install the AWS Schema Conversion tool on the server. Downloading the file and installing it will give you the latest version of the AWS Schema Conversion Tool.
@@ -61,6 +66,8 @@ Now that you are connected to the source SQL Server (the EC2 instance), you are 
 ## Create a Database Migration Project in the SCT
 Now that you have installed the AWS Schema Conversion Tool, the next step is to create a Database Migration Project using the tool.
 
+*Note: AWS SCT uses JDBC driver to connect to the source and target database. To download the Oracle and PostgreSQL JDBC drivers on the EC2 instance, go to https://www.oracle.com/jdbc & https://jdbc.postgresql.org/ respectively.*
+
 8. Within the Schema Conversion Tool, enter the following values into the form and then click **Next**.
 
 | **Parameter** | **Value** |
@@ -70,9 +77,9 @@ Now that you have installed the AWS Schema Conversion Tool, the next step is to 
 | **Database Type** | Transactional Database (OLTP) |
 | **Source Database Engine** | Oracle / I want to switch engines and optimize for the cloud |
 
-![\[SqlSct05\]](img/SqlSct05.png)
+![\[OracleSct05\]](img/OracleSct05.png)
 
-9. Specify the source database configurations in the form, and click Test Connection. Once the connection is successfully tested, click Next.
+9. Specify the source database configurations in the form, and click **Test Connection**. Once the connection is successfully tested, click **Next**.
 
 | **Parameter** | **Value** |
 | ------ | ------ |
@@ -83,23 +90,23 @@ Now that you have installed the AWS Schema Conversion Tool, the next step is to 
 | **User Name** | dbmaster |
 | **Password** | dbmaster123 |
 | **Use SSL** | Unchecked |
-| **Save Password** | Checked |
-| **Oracle Driver Path** | C:\Users\Administrator\Desktop\DMS Workshop\JDBC\ojdbc7.jar |
+| **Store Password** | Checked |
+| **Oracle Driver Path** | **Path to Oracle JDBC driver on the EC2 instance that you downloaded from https://www.oracle.com/jdbc** |
 
-![\[SqlSct06\]](img/SqlSct06.png)
+![\[OracleSct06\]](img/OracleSct06.png)
 
 10.	Select the **DMS_SAMPLE** database, then click **Next**.
 
-![\[SqlSct07\]](img/SqlSct07.png)
+![\[OracleSct07\]](img/OracleSct07.png)
 
 11.	Review the **Database Migration Assessment Report**.
 
-![\[SqlSct08\]](img/SqlSct08.png)
+![\[OracleSct08\]](img/OracleSct08.png)
 
 
 SCT will examine in detail all of the objects in the schema of source database. It will convert as much as possible automatically and provides detailed information about items it could not convert. 
 
-![\[SqlSct09\]](img/SqlSct09.png)
+![\[OracleSct09\]](img/OracleSct09.png)
 
 Generally, packages, procedures, and functions are more likely to have some issues to resolve because they contain the most custom or proprietary SQL code. AWS SCT specifies how much manual change is needed to convert each object type. It also provides hints about how to adapt these objects to the target schema successfully.
 
@@ -112,13 +119,14 @@ Generally, packages, procedures, and functions are more likely to have some issu
 | **Target Database Engine** | Amazon Aurora (PostgreSQL compatible) |
 | **Server Name** | **\< TargetAuroraPostgreSQLEndpoint \>** |
 | **Server Port** | 5432 |
+| **Database Name** | AuroraDB |
 | **User Name** | dbmaster |
 | **Password** | dbmaster123 |
 | **Use SSL** | Unchecked |
 | **Save Password** | Checked |
-| **Amazon Aurora Driver Path** | C:\Users\Administrator\Desktop\DMS Workshop\JDBC\postgresql-42.2.6.jar |
+| **Amazon Aurora Driver Path** | **Path to PostgreSQL JDBC driver on the EC2 instance that you downloaded from https://jdbc.postgresql.org/** |
 
-![\[SqlSct10\]](img/SqlSct10.png)
+![\[OracleSct10\]](img/OracleSct10.png)
 
 ## Convert the Schema Using the SCT
 Now that you have created a new Database Migration Project, the next step is to convert the Oracle schema of the source database to that of Amazon Aurora PostgreSQL database. 
@@ -129,17 +137,17 @@ You can view the generated DDL in the project console, and edit it before applyi
 
 *NOTE: You may be prompted with a dialog box “Object may already exist in the target database, replace?” Select Yes and conversion will start.*
 
-![\[SqlSct11\]](img/SqlSct11.png)
+![\[OracleSct11\]](img/OracleSct11.png)
 
 AWS SCT analyses the schema and creates a database migration assessment report for the conversion to PostgreSQL. Items with a red exclamation mark next to them cannot be directly translated from the source to the target. This includes Stored Procedures, and Packages.
 
 15.	Click on the **View** button, and choose **Assessment Report view**. 
 
-![\[SqlSct11\]](img/SqlSct11.png)
+![\[OracleSct12\]](img/OracleSct12.png)
 
 16.	Next, navigate to the **Action Items** tab in the report to see the items that the tool could not convert, and find out how much manual changes you need to make. 
 
-![\[SqlSct12\]](img/SqlSct12.png)
+![\[OracleSct13\]](img/OracleSct13.png)
 
 Check each of the issues listed and compare the contents under the source Oracle panel and the target Aurora PostgreSQL panel. Are the issues resolved? And how? 
 
@@ -150,20 +158,18 @@ Notice the issue highlighted in the private function named **GET_OPEN_EVENTS**. 
   1. Modify the objects on the source Oracle database so that AWS SCT can convert the objects to the target Aurora PostgreSQL database.
   2. Instead of modifying the source schema, modify scripts that AWS SCT generates before applying the scripts on the target Aurora PostgreSQL database.
 
-For the sake of time, we skip modifying all the objects that could not be automatically converted. Instead, as an example, you will manually modify one of the stored procedures from within SCT to make it compatible with the target database.
-
-![\[SqlSct13\]](img/SqlSct13.png)
+![\[OracleSct14\]](img/OracleSct14.png)
 
 17.	[Optional] Manually fix the schema issue. Then, right-click on the DMS_SAMPLE schema, and choose Create Report. Observe that the schema of the source database is now fully compatible with the target database. 
 
 
 18.	Right click on the **dms_sample** schema in the right-hand panel, and click **Apply to database**.
 
-![\[SqlSct14\]](img/SqlSct14.png)
+![\[OracleSct15\]](img/OracleSct15.png)
 
 19.	When prompted if you want to apply the schema to the database, click **Yes**.
 
-![\[SqlSct15\]](img/SqlSct15.png)
+![\[OracleSct16\]](img/OracleSct16.png)
 
 20.	At this point, the schema has been applied to the target database. Expand the **dms_sample** schema to see the tables.
 
@@ -175,7 +181,7 @@ This part demonstrated how easy it is to migrate the schema of an Oracle databas
 
 The same steps can be followed to migrate SQL Server and Oracle workloads to other RDS engines including PostgreSQL and MySQL.
 
-Next section desribes the steps required to move the actual data using AWS DMS.
+The next section describes the steps required to move the actual data using AWS DMS.
 
 
 # Part 2: Migrating the Data Using the AWS Database Migration Service (AWS DMS)
@@ -184,9 +190,12 @@ AWS Database Migration Service (DMS) helps you migrate databases to AWS easily a
 
 AWS DMS doesn't migrate your secondary indexes, sequences, default values, stored procedures, triggers, synonyms, views, and other schema objects that aren't specifically related to data migration. To migrate these objects to your Aurora PostgreSQL target, we used the AWS Schema Conversion Tool (AWS SCT) in Part 1 of this guide. 
 
-In this section we will perform database migration from a source Oracle database on an Amazon RDS instance to a target Amazon Aurora (PostgreSQL) database by:
-- 1. Performing a full load migration of source oracle database to target Aurora PostgreSQL database using AWS DMS.
-- 2.Capturing change data set (CDC) from the Oracle database EC2 instance to an RDS Aurora PostgreSQL instance using AWS DMS.	
+In this section we will perform database migration from a source Oracle database on an Amazon RDS instance to a target Amazon Aurora (PostgreSQL) in two parts:
+
+1. First, you perform a full load migration of source oracle database to target Aurora PostgreSQL database using AWS DMS.
+
+2. Next, you capture data changes (CDC) from the Oracle database, and replicate them automatically to Aurora PostgreSQL instance using AWS DMS.	
+
 *Please note that you need to complete the steps described in the AWS Schema Conversion Tool (SCT) section as a pre-requisite for this part.* 
 
 The following steps provide instructions to migrate existing data from the source Oracle running on an Amazon RDS instance to a target Amazon Aurora (PostgreSQL) database. In this exercise you perform the following tasks:
@@ -224,7 +233,7 @@ If you disconnected from the Source EC2 instance, follow the steps 1 to 3 in Par
 
 3. After the you see the test status as **Successful**, click **Connect**. 
 
-## Configure the Source SQL Server Database for Replication
+## Configure the Source Oracle Database for Replication
 
 To use Oracle as a source for AWS Database Migration Service (AWS DMS), you must first provide a user account (DMS user) with read and write privileges on the Oracle database. 
 
@@ -262,7 +271,7 @@ GRANT LOGMINING TO DMS_USER;
 ```
 ![\[OracleDms04\]](img/OracleDms04.png)
 
-5. In addition, run the following:
+6. In addition, run the following:
 
 ```sql
 exec rdsadmin.rdsadmin_util.grant_sys_object('V_$ARCHIVED_LOG','DMS_USER','SELECT');
@@ -282,7 +291,7 @@ exec rdsadmin.rdsadmin_util.grant_sys_object('V_$LOGMNR_CONTENTS','DMS_USER','SE
 exec rdsadmin.rdsadmin_util.grant_sys_object('DBMS_LOGMNR','DMS_USER','EXECUTE');
 ```
 
-![![\[OracleDms05\]](img/OracleDms05.png)
+![\[OracleDms05\]](img/OracleDms05.png)
 
 7. Run the following query to retain archived redo logs of the source Oracle database instance for 24 hours:
 
@@ -337,7 +346,7 @@ During the full load process, AWS DMS does not load tables in any particular ord
 
 ![\[OracleDms09\]](img/OracleDms09.png)
 
-14.	Right-click on **AuroraDB** database from left-hand menu, and then select **Query Tools**. 
+14.	Right-click on **AuroraDB** database from left-hand menu, and then select **Query Tool**. 
 
 ![\[OracleDms10\]](img/OracleDms10.png)
 
@@ -370,7 +379,7 @@ An AWS DMS replication instance performs the actual data migration between sourc
 | ------ | ------ |
 | **Name** | DMSReplication |
 | **Description** | Replication server for Database Migration |
-| **Instance Class** | dms.c4.4xlarge |
+| **Instance Class** | dms.c4.xlarge |
 | **Engine version** | Leave the default value |
 | **Allocated storage (GB)** | 50 |
 | **VPC** | **\<VPC ID from Environment Setup Step\>** |
@@ -456,6 +465,8 @@ AWS DMS uses **Database Migration Task** to migrate the data from source to the 
 | **Enable validation** | Unchecked |
 | **Enable CloudWatch logs** | Checked |
 
+*Note: By enabling [Validation][dms-validation] you can ensure that your data was migrated accurately from the source to the target. If you enable validation for a task, AWS DMS begins comparing the source and target data immediately after a full load is performed for a table. Validaiton may add more time to the migraiton task. We did not enable validation to reduce the time it takes to complete this walkthrough.*
+
 19.	Expand the **Table mappings** section, and select **Guided UI** for the editing mode. 
 
 20.	Click on **Add new selection rule** button and enter the following values in the form:
@@ -505,15 +516,13 @@ If your schemas still do not show up on the Create Task screen, click on the Gui
 - 1. Click on your task (oracle-migration-task) and scroll to the Table statistics section to view the table statistics to see how many rows have been moved.
 - 2. If there is an error, the status color changes from green to reed. Click on View logs link for the logs to debug.	
 
-25.	When the full load is complete, remember to enable the foreign key constraints.
-
 ## Inspect the Content of Target Database
 
-26.	If you already disconnected from the EC2 Server, follow steps 1, 2, and 3 at the top of this toturial to connect (RDP) to your EC2 instance.
+25.	If you already disconnected from the EC2 Server, follow steps 1, 2, and 3 at the top of this toturial to connect (RDP) to your EC2 instance.
 
-27.	Open **pgAdmin4** from within the EC2 server, and then connect to the Target Aurora RDS (PostgreSQL) database connection that you created earlier. 	
+26.	Open **pgAdmin4** from within the EC2 server, and then connect to the Target Aurora RDS (PostgreSQL) database connection that you created earlier. 	
 
-28.	Inspect the migrated data, by querying one of the tables in the target database. For example, the following query should return a table with two rows:
+27.	Inspect the migrated data, by querying one of the tables in the target database. For example, the following query should return a table with two rows:
 
 ```sql
 SELECT *
@@ -524,13 +533,18 @@ FROM dms_sample.sport_type;
 
 Note that baseball, and football are the only two sports that are currently listed in this table. In the next section you will insert several new records to the source database with information about other sport types. DMS will automatically replicate these new records from the source database to the target database. 
 
+28. Now, use the following script to enable the foreign key constraints that we dropped earlier:
+	1. Open **AddConstraintsPostgreSQL.sql** inside the **DMS Workshop\Scripts** folder in Notepad. 
+	2. Copy the content of the file to the **Query Editor** in **pgAdmin 4**.
+	3. **Execute** the script.
+
 ## Capture Data Changes
 
 29.	Create another **Data Migration Task** with the following values for capturing data changes to the source Oracle database, and replicating the changes to the target Aurora RDS instance.
 
 | **Parameter** | **Value** |
 | ------ | ------ |
-| **Task identifier** | oracle-migration-task |
+| **Task identifier** | oracle-replication-task |
 | **Replication instance** | oracle-replication |
 | **Source database endpoint** | oracle-source |
 | **Target database endpoint** | aurora-target |
@@ -585,11 +599,11 @@ SELECT * FROM dms_sample.sport_type;
 
 ![\[OracleDms24\]](img/OracleDms24.png)
 
-36.	Repeat steps 26 and 28 to inspect the content of **sport_type** table in the target database.
+36.	Repeat steps 25 and 27 to inspect the content of **sport_type** table in the target database.
 
 ![\[OracleDms25\]](img/OracleDms25.png)
 
-Notice the new records for: basketball, cricket, hockey, soccer, and volleyball that you added to the sports_type table in the source database have been replicated to your **dms_reporting** database. You can further investigate the number of inserts, deletes, updates, and DDLs by viewing the **Table statistics** of your **Database migration tasks** in AWS console. 
+Notice the new records for: basketball, cricket, hockey, soccer, and volleyball that you added to the sports_type table in the source database have been replicated to your **dms_sample** database. You can further investigate the number of inserts, deletes, updates, and DDLs by viewing the **Table statistics** of your **Database migration tasks** in AWS console. 
 
 The AWS DMS task keeps the target Aurora PostgreSQL database up to date with source database changes. AWS DMS keeps all the tables in the task up to date until it's time to implement the application migration. The latency is close to zero when the target has caught up to the source.
 
@@ -608,3 +622,4 @@ You can follow the same steps to migrate SQL Server and Oracle workloads to othe
 [ec2]: <https://aws.amazon.com/ec2/>
 [vpc]: <https://aws.amazon.com/vpc/>
 [download-sct]: <https://docs.aws.amazon.com/SchemaConversionTool/latest/userguide/CHAP_Installing.html>
+[dms-validation]: <https://docs.aws.amazon.com/dms/latest/userguide/CHAP_Tasks.CustomizingTasks.TaskSettings.DataValidation.html>

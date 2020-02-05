@@ -4,13 +4,13 @@ This step-by-step guide demonstrates how you can use [AWS Database Migration Ser
 
 # Connecting to your Environment 
 
-Before proceeding further, make sure you have completed the instructions in the [Enviornment Configuraiton][env-config] step to deploy the resources we will be using for this database migration in your own account. These resources include:
+Before proceeding further, make sure you have completed the instructions in the [Environment Configuration][env-config] step to deploy the resources we will be using for this database migration in your own account. These resources include:
 
 - A Microsoft SQL Server running on an [Amazon Elastic Compute Cloud (Amazon EC2)][ec2] instance as the source database. This server is also used run the AWS Schema Conversion Tool (AWS SCT), Microsoft SQL Server Management Studio, and MySQL Workbench.
 - An AWS RDS Aurora (MySQL) instance used as the target database.
 
 
-Once you have completed the instructions in the [Enviornment Configuraiton][env-config] step, take special note of the following output values: 
+Once you have completed the instructions in the [Environment Configuration][env-config] step, take special note of the following output values: 
 
 - SourceEC2PublicDNS
 - TargetAuroraMySQLEndpoint
@@ -21,26 +21,29 @@ Once you have completed the instructions in the [Enviornment Configuraiton][env-
 The AWS Schema Conversion Tool is a [downloadable][download-sct] application that enables you to convert your existing database schema from one database engine to another. You can convert relational OLTP schemas, data warehouse OLAP schemas, and document-based NoSQL database schemas. AWS SCT specifically eases the transition from one database engine to another.
 
 The following steps provide instructions for converting a Microsoft SQL Server database to an Amazon Aurora (MySQL) database. In this exercise, you perform the following tasks:
-- [Log on the Source EC2 Instance Running SQL Server](#log-on-the-source-sql-server-running-on-an-ec2-instance)
+- [Log into the Source EC2 Instance Running SQL Server](#log-into-the-source-sql-server-running-on-an-ec2-instance)
 - [Install the Schema Conversion Tool on the Server](#install-the-schema-conversion-tool-on-the-server)
 - [Create a Database Migration Project in the SCT](#create-a-database-migration-project)
 - [Convert the schema using the SCT](#convert-the-schema)
 - [Modify Procedural Code to Adapt It For the New Database Dialect](#modify-procedural-code-to-adapt-it-for-the-new-database-dialect)
 
-## Log on the Source EC2 Instance Running SQL Server
+## Log into the Source EC2 Instance Running SQL Server
 1.	Go to the AWS EC2 [console][ec2-console] and click on **Instances** in the left column.
 2.	Select the instance with the name **\<StackName\>-EC2Instance** and then click the Connect button. 
 
 ![\[SqlSct01\]](img/SqlSct01.png)
 
-3. In this step, you perform 3 tasks:
+3. In this step, you retrieve the EC2 administrator password in order to RDP into the instnace:
 
-    1. Click the **Get Password** button and upload the **Key Pair** file that you downloaded earlier. Please take note of the EC2 console generated administrator password.
-    2. Click on **Download Remote Desktop File** to download the RDP file to access this EC2 instance. 
-    3. Connect to the EC2 instance using the RDP.
+    1. Click the **Get Password** button.
+    ![\[SqlSct02\]](img/SqlSct02.png)
+    2. Upload the **Key Pair** file that you downloaded earlier.
+    3. Click on **Decrypt Password**.
+    ![\[SqlSct02-b\]](img/SqlSct02-b.png)
+    4. Take note of the EC2 console generated administrator password.
+    5. Click on **Download Remote Desktop File** to download the RDP file to access this EC2 instance. 
+    6. Connect to the EC2 instance using an RDP client.
     
-![\[SqlSct02\]](img/SqlSct02.png)
-
 ## Install the Schema Conversion Tool on the Server
 Now that you are connected to the source SQL Server (the EC2 instance), you are going to install the AWS Schema Conversion tool on the server. Downloading the file and installing it will give you the latest version of the AWS Schema Conversion Tool.
 
@@ -61,6 +64,8 @@ Now that you are connected to the source SQL Server (the EC2 instance), you are 
 ## Create a Database Migration Project in the SCT
 Now that you have installed the AWS Schema Conversion Tool, the next step is to create a Database Migration Project using the tool.
 
+*Note: AWS SCT uses JDBC driver to connect to the source and target database. To download the Microsoft SQL Server and MySQL JDBC drivers on the EC2 instance, go to https://msdn.microsoft.com/en-us/sqlserver/aa937724.aspx & https://dev.mysql.com/downloads/connector/j/ respectively.*
+
 8. Within the Schema Conversion Tool, enter the following values into the form and then click **Next**.
 
 | **Parameter** | **Value** |
@@ -72,7 +77,7 @@ Now that you have installed the AWS Schema Conversion Tool, the next step is to 
 
 ![\[SqlSct05\]](img/SqlSct05.png)
 
-9. Specify the source database configurations in the form, and click Test Connection. Once the connection is successfully tested, click Next.
+9. Specify the source database configurations in the form, and click **Test Connection**. Once the connection is successfully tested, click **Next**.
 
 | **Parameter** | **Value** |
 | ------ | ------ |
@@ -83,10 +88,12 @@ Now that you have installed the AWS Schema Conversion Tool, the next step is to 
 | **User Name** | awssct |
 | **Password** | Password1 |
 | **Use SSL** | Unchecked |
-| **Save Password** | Checked |
-| **Microsoft SQL Server Driver Path** | C:\Users\Administrator\Desktop\DMS Workshop\JDBC\sqljdbc_7.2\enu\mssql-jdbc-7.2.2.jre8.jar |
+| **Store Password** | Checked |
+| **Microsoft SQL Server Driver Path** | **Path to SQL Server JDBC driver on the EC2 instance that you downloaded from https://msdn.microsoft.com/en-us/sqlserver/aa937724.aspx** |
 
 ![\[SqlSct06\]](img/SqlSct06.png)
+
+*Note that after hitting **Next** and loading metadata, you may get a warning message saying: **Metadata loading was intrupted because of data fetching issues.** You can ignore this message as it doesn't affect our sample migraiton.*
 
 10.	Select the **dms_sample** database, then click **Next**.
 
@@ -115,8 +122,8 @@ Generally, packages, procedures, and functions are more likely to have some issu
 | **User Name** | awssct |
 | **Password** | Password1 |
 | **Use SSL** | Unchecked |
-| **Save Password** | Checked |
-| **Microsoft SQL Server Driver Path** | C:\Users\Administrator\Desktop\DMS Workshop\JDBC\mysql-connector-java-8.0.16.jar |
+| **Store Password** | Checked |
+| **MySQL Driver Path** | **Path to SQL Server JDBC driver on the EC2 instance that you downloaded from https://dev.mysql.com/downloads/connector/j/** |
 
 ![\[SqlSct10\]](img/SqlSct10.png)
 
@@ -188,7 +195,7 @@ This part demonstrated how easy it is to migrate the schema of a Microsoft SQL S
 
 The same steps can be followed to migrate SQL Server and Oracle workloads to other RDS engines including PostgreSQL and MySQL.
 
-Next section desribes the steps required to move the actual data using AWS DMS.
+The next section describes the steps required to move the actual data using AWS DMS.
 
 
 # Part 2: Migrating the Data Using the AWS Database Migration Service (AWS DMS)
@@ -242,7 +249,7 @@ Migrating only the existing data does not require any configuration on the sourc
       
 ![\[SqlDms03\]](img/SqlDms03.png)
 
-*NOTE: Replication requires a primary key for all tables that are being replicated. If your tables don’t have primary keys defined, consider using CDC instead.*
+*NOTE: Replication requires a primary key for all tables that are being replicated. If your tables don’t have primary keys defined, consider using MS-CDC instead.*
 
 ## Configure the Target Aurora RDS database for Replication
 
@@ -254,7 +261,7 @@ During the full load process, AWS DMS as default does not load tables in any par
 | ------ | ------ |
 | **Connection Name** | Target Aurora RDS (MySQL) |
 | **Host Name** | **\<TargetAuroraMySQLEndpoint\>** |
-| **Port** | localhost |
+| **Port** | 3306 |
 | **Username** | awssct |
 | **Password** | Password1 |
 
@@ -296,7 +303,7 @@ An AWS DMS replication instance performs the actual data migration between sourc
 | ------ | ------ |
 | **Name** | DMSReplication |
 | **Description** | Replication server for Database Migration |
-| **Instance Class** | dms.c4.4xlarge |
+| **Instance Class** | dms.c4.xlarge |
 | **Engine version** | Leave the default value |
 | **Allocated storage (GB)** | 50 |
 | **VPC** | **\<VPC ID from Environment Setup Step\>** |
@@ -381,6 +388,8 @@ AWS DMS uses **Database Migration Task** to migrate the data from source to the 
 | **Enable validation** | Unchecked |
 | **Enable CloudWatch logs** | Checked |
 
+*Note: By enabling [Validation][dms-validation] you can ensure that your data was migrated accurately from the source to the target. If you enable validation for a task, AWS DMS begins comparing the source and target data immediately after a full load is performed for a table. Validaiton may add more time to the migraiton task. We did not enable validation to reduce the time it takes to complete this walkthrough.*
+
 19.	Expand the **Table mappings** section, and select **Guided UI** for the editing mode. 
 
 20.	Click on **Add new selection rule** button and enter the following values in the form:
@@ -404,6 +413,39 @@ If your schemas still do not show up on the Create Task screen, click on the Gui
 
 ![\[SqlDms14\]](img/SqlDms14.png)
 
+*Note: Alternatively, instead of performing steps 19 to 21, you can simply select **JSON editor** in the **Table mappings** and then paste the following code. Either approach yields the same result.*
+
+```json
+{
+    "rules": [
+        {
+            "rule-type": "transformation",
+            "rule-id": "1",
+            "rule-name": "1",
+            "rule-target": "schema",
+            "object-locator": {
+                "schema-name": "dbo",
+                "table-name": "%"
+            },
+            "rule-action": "rename",
+            "value": "dms_sample_dbo",
+            "old-value": null
+        },
+        {
+            "rule-type": "selection",
+            "rule-id": "2",
+            "rule-name": "2",
+            "object-locator": {
+                "schema-name": "dbo",
+                "table-name": "%"
+            },
+            "rule-action": "include",
+            "filters": []
+        }
+    ]
+}
+```
+
 22.	After entering the values click on **Create task**. 
 
 23.	At this point, the task should start running and replicating data from the **dms_sample** database running on EC2 to the Amazon Aurora RDS (MySQL) instance.
@@ -414,24 +456,27 @@ If your schemas still do not show up on the Create Task screen, click on the Gui
     1. Click on your task **(auroramigrationtask)** and scroll to the **Table statistics** section to view the table statistics to see how many rows have been moved.
     2. If there is an error, the status color changes from green to red. Click on **View logs** link for the logs to debug.
 
-25.	When the full load is complete, remember to generate a SQL statement to enable the foreign key constraints that we dropped earlier.
+## Inspect the Content of Target Database
 
-Inspect the Content of Target Database
+25.	If you already disconnected from the EC2 SQL Server source database server, follow steps 1, 2, and 3 in Part 1 to connect (RDP) to your EC2 instance.
 
-26.	If you already disconnected from the EC2 SQL Server source database server, follow steps 1, 2, and 3 in Part 1 to connect (RDP) to your EC2 instance.
+26.	Open **MySQL Workbench 8.0 CE** from within the EC2 server, and click on Target Aurora RDS (MySQL) database connection that you created earlier. 	
 
-27.	Open **MySQL Workbench 8.0 CE** from within the EC2 server, and click on Target Aurora RDS (MySQL) database connection that you created earlier. 	
-
-28.	Inspect the migrated data, by querying one of the tables in the target database. For example, the following query should return a table with two rows:
+27.	Inspect the migrated data, by querying one of the tables in the target database. For example, the following query should return a table with two rows:
 
 ```sql
 SELECT *
 FROM dms_sample_dbo.sport_type;
 ```
-
 ![\[SqlDms16\]](img/SqlDms16.png)
 
 Note that baseball, and football are the only two sports that are currently listed in this table. In the next section you will insert several new records to the source database with information about other sport types. DMS will automatically replicate these new records from the source database to the target database.
+
+28.	Now, use the following script to enable the foreign key constraints that we dropped earlier:
+
+    1. Within **MySQL Workbench**, click on the **File** menu, and choose **Open SQL Script**. 
+    2. Open **AddConstraintsSQLServer.sql** from **\Desktop\DMS Workshop\Scripts**. 
+    3. **Execute** the script.
 
 ## Replicating Data Changes from Source to the Target Database
 
@@ -454,7 +499,7 @@ WITH
 );
 ```
 
-31.	Repeat steps 24 and 25 to inspect the content of **sport_type** table in the target database.
+31.	Repeat steps 25 and 27 to inspect the content of **sport_type** table in the target database.
 
 ![\[SqlDms17\]](img/SqlDms17.png)
 
@@ -477,3 +522,4 @@ You can follow the same steps to migrate SQL Server and Oracle workloads to othe
 [ec2]: <https://aws.amazon.com/ec2/>
 [vpc]: <https://aws.amazon.com/vpc/>
 [download-sct]: <https://docs.aws.amazon.com/SchemaConversionTool/latest/userguide/CHAP_Installing.html>
+[dms-validation]: <https://docs.aws.amazon.com/dms/latest/userguide/CHAP_Tasks.CustomizingTasks.TaskSettings.DataValidation.html>

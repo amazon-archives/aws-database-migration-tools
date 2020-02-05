@@ -1,22 +1,23 @@
 # AWS Database Migration Blog
-# Last Updated on Nov 22, 2019 by hoomanh@
+# Last Updated on Feb 04, 2020 by hoomanh@
 
 AWSTemplateFormatVersion: '2010-09-09'
 Description: CloudFormation Template for AWS Database Migration Blog.
+
 Metadata: 
   AWS::CloudFormation::Interface: 
     ParameterGroups: 
       -
         Label:
-          default: "Database Migration Type"
+          default: "Database Migration Workshop Lab Environment"
         Parameters:
-          - MigrationType
+          - LabType
       - 
         Label: 
           default: "Amazon EC2 Configuration"
         Parameters:
-          - KeyName
           - EC2ServerInstanceType
+          - KeyName
       - 
         Label: 
           default: "Target Amazon RDS Database Configuration"
@@ -30,96 +31,45 @@ Metadata:
           - Subnet1CIDR
           - Subnet2CIDR
           - Subnet3CIDR 
+
 Mappings:
   RegionMap:
-    us-east-1:
-      "DMSAMI" : "ami-077a6363df8e6b81a" # Virginia - Updated July 09, 2019
-    us-east-2:
-      "DMSAMI" : "ami-0b2cd90e595b4fbdf" # Ohio - Updated July 09, 2019
-    us-west-2:
-      "DMSAMI" : "ami-08ad3b503e5fbda86" # Oregon - Updated July 09, 2019
-    ap-south-1:
-       "DMSAMI" : "ami-084b98d08e529a7ce" # Mumbai - Updated July 09, 2019
-    ap-northeast-2:
-       "DMSAMI" : "ami-0cbd98d92366c727e" # Seoul - Updated July 09, 2019
-    ap-southeast-1:
-      "DMSAMI" : "ami-0f6fb229f36616672" # Singapore - Updated July 09, 2019
-    ap-southeast-2:
-      "DMSAMI" : "ami-00795035d4f33fb59" # Sydney - Updated July 09, 2019
-    ap-northeast-1:
-      "DMSAMI" : "ami-00f8c0f2252af1b2f" # Tokyo - Updated July 09, 2019
-    eu-central-1:
-      "DMSAMI" : "ami-03647cb2150df12c9" # Frankfurt - Updated July 09, 2019
-    eu-west-1:
-      "DMSAMI" : "ami-08a343117001e9940" # Ireland - Updated July 09, 2019
-    eu-west-2:
-      "DMSAMI" : "ami-05649ae0708fb839e" # London - Updated July 09, 2019
-    eu-west-3:
-      "DMSAMI" : "ami-0fbb5f624929600ab" # Paris - Updated July 09, 2019
-    eu-north-1:
-      "DMSAMI" : "ami-0364d42f436f62276" # Stockholm - Updated July 09, 
-    sa-east-1:
-      "DMSAMI" : "ami-0101d292d5e2b1ab9" # Sao Paulo - Updated July 09, 2019
-  OracleEngineVersion: 
-    us-east-1: 
-      "ver": "12.1.0.2.v6" # Virginia
-    us-east-2: 
-      "ver": "12.1.0.2.v6" # Ohio
-    us-west-2: 
-      "ver": "12.1.0.2.v6" # Oregon
-    ap-south-1: 
-      "ver": "12.1.0.2.v6" # Mumbai
-    ap-northeast-2: 
-      "ver": "12.1.0.2.v6" # Seoul
-    ap-southeast-1: 
-      "ver": "12.1.0.2.v6" # Singapore
-    ap-southeast-2: 
-      "ver": "12.1.0.2.v6" # Sydney
-    ap-northeast-1: 
-      "ver": "12.1.0.2.v6" # Tokyo
-    eu-central-1: 
-      "ver": "12.1.0.2.v6" # Frankfurt
-    eu-west-1: 
-      "ver": "12.1.0.2.v6" # Ireland
-    eu-west-2:
-      "ver": "12.1.0.2.v6" # London
-    eu-west-3:
-      "ver": "12.1.0.2.v6" # Paris
-    eu-north-1: 
-      "ver": "12.1.0.2.v6" # Stockholm
-    sa-east-1: 
-      "ver": "12.1.0.2.v6" # Sao Paulo
-  OracleSnapshotId: 
-    us-east-1: 
-      "snapid" : "arn:aws:rds:us-east-1:833997227572:snapshot:dms-lab-oracle-source-snapshot01" # Virginia
-    us-east-2: 
-      "snapid" : "arn:aws:rds:us-east-2:833997227572:snapshot:dms-lab-oracle-source-us-east-2-snapshot01" # Ohio
-    us-west-2: 
-      "snapid" : "arn:aws:rds:us-west-2:833997227572:snapshot:dms-lab-oracle-source-us-west-2-snapshot01" # Oregon
-    ap-south-1:
-      "snapid" : "arn:aws:rds:ap-south-1:833997227572:snapshot:dms-lab-oracle-source-ap-south-1-snapshot01" # Mumbai
-    ap-northeast-2:
-      "snapid" : "arn:aws:rds:ap-northeast-2:833997227572:snapshot:dms-lab-oracle-source-ap-northeast-2-snapshot01" # Seoul 
-    ap-southeast-1:
-      "snapid" : "arn:aws:rds:ap-southeast-1:833997227572:snapshot:dms-lab-oracle-source-ap-southeast-1-snapshot01" # Singapore
-    ap-southeast-2:
-      "snapid" : "arn:aws:rds:ap-southeast-2:833997227572:snapshot:dms-lab-oracle-source-ap-southeast-2-snapshot01" # Sydney 
-    ap-northeast-1:
-      "snapid" : "arn:aws:rds:ap-northeast-1:833997227572:snapshot:dms-lab-oracle-source-ap-northeast-1-snapshot01" # Tokyo
-    eu-central-1: 
-      "snapid" : "arn:aws:rds:eu-central-1:833997227572:snapshot:dms-lab-oracle-source-eu-central-1-snapshot01" # Frankfurt
-    eu-west-1:
-      "snapid" : "arn:aws:rds:eu-west-1:833997227572:snapshot:dms-lab-oracle-source-eu-west-1-snapshot01" # Ireland
-    eu-west-2:
-      "snapid" : "arn:aws:rds:eu-west-2:833997227572:snapshot:dms-lab-oracle-source-snapshot" # Paris
-    eu-west-3:
-      "snapid" : "arn:aws:rds:eu-west-3:833997227572:snapshot:dms-lab-oracle-source-snapshot" # Paris
-    eu-north-1:
-      "snapid" : "arn:aws:rds:eu-north-1:833997227572:snapshot:dms-lab-oracle-source-snapshot" # Stockholm
-    sa-east-1:
-      "snapid" : "arn:aws:rds:sa-east-1:833997227572:snapshot:dms-lab-oracle-source-snapshot" # Sao Paulo 
+    us-east-1: # Virginia
+      "EC2AMI" : "ami-009e27c98ba186924"  # Updated Feb 04, 2020
+      "OracleSnapshotId" : "arn:aws:rds:us-east-1:833997227572:snapshot:dms-lab-oracle-source-snapshot01"
+    us-east-2: # Ohio
+      "EC2AMI" : "ami-0f4fcb28450faec70" # Updated Feb 04, 2020
+      "OracleSnapshotId" : "arn:aws:rds:us-east-2:833997227572:snapshot:dms-lab-oracle-source-us-east-2-snapshot01" 
+    us-west-2: # Oregon
+      "EC2AMI" : "ami-03d49c6c9611beab7" # Updated Feb 04, 2020
+      "OracleSnapshotId" : "arn:aws:rds:us-west-2:833997227572:snapshot:dms-lab-oracle-source-us-west-2-snapshot01"   
+    ap-northeast-2: # Seoul
+      "EC2AMI" : "ami-0b908d24bf3c6399e" # Updated Feb 04, 2020
+      "OracleSnapshotId" : "arn:aws:rds:ap-northeast-2:833997227572:snapshot:dms-lab-oracle-source-ap-northeast-2-snapshot01"  
+    ap-southeast-1: # Singapore
+      "EC2AMI" : "ami-04847c616970caf64" # Updated Feb 04, 2020
+      "OracleSnapshotId" : "arn:aws:rds:ap-southeast-1:833997227572:snapshot:dms-lab-oracle-source-ap-southeast-1-snapshot01" 
+    ap-southeast-2: # Sydney 
+      "EC2AMI" : "ami-02f42284beada20ab" # Updated Feb 04, 2020
+      "OracleSnapshotId" : "arn:aws:rds:ap-southeast-2:833997227572:snapshot:dms-lab-oracle-source-ap-southeast-2-snapshot01" 
+    ap-northeast-1: # Tokyo
+      "EC2AMI" : "ami-003a4026778365fe6" # Updated Feb 04, 2020
+      "OracleSnapshotId" : "arn:aws:rds:ap-northeast-1:833997227572:snapshot:dms-lab-oracle-source-ap-northeast-1-snapshot01"
+    eu-central-1: # Frankfurt
+      "EC2AMI" : "ami-080456292bd431060" # Updated Feb 04, 2020
+      "OracleSnapshotId" : "arn:aws:rds:eu-central-1:833997227572:snapshot:dms-lab-oracle-source-eu-central-1-snapshot01"
+    eu-west-1: # Ireland
+      "EC2AMI" : "ami-09119a9664b092eae" # Updated Feb 04, 2020
+      "OracleSnapshotId" : "arn:aws:rds:eu-west-1:833997227572:snapshot:dms-lab-oracle-source-eu-west-1-snapshot01"
+    eu-west-2: # London
+      "EC2AMI" : "ami-01a045a6a69cadb2e" # Updated Feb 04, 2020
+      "OracleSnapshotId" : "arn:aws:rds:eu-west-2:833997227572:snapshot:dms-lab-oracle-source-snapshot"
+    eu-west-3: # Paris - 
+      "EC2AMI" : "ami-0570869f360f652ae" # Updated Feb 04, 2020
+      "OracleSnapshotId" : "arn:aws:rds:eu-west-3:833997227572:snapshot:dms-lab-oracle-source-snapshot"
+
 Parameters:
-  MigrationType: 
+  LabType: 
     Description: 'Select your Database Migration lab:'
     Type: String
     AllowedValues: 
@@ -165,25 +115,41 @@ Parameters:
   EC2ServerInstanceType:
     Description: Amazon EC2 Instance Type
     Type: String
-    Default: m5.large
+    Default: m5a.xlarge
     AllowedValues:
       - m5.large
       - m5.xlarge
+      - m5.2xlarge
+      - m5.4xlarge
+      - m5.8xlarge
       - m5a.large
       - m5a.xlarge
+      - m5a.2xlarge
+      - m5a.4xlarge
+      - m5a.8xlarge
     ConstraintDescription: Must be a valid EC2 instance type. 
   RDSInstanceType:
     Description: Amazon RDS Aurora Instance Type
     Type: String
-    Default: db.r4.large
+    Default: db.r5.xlarge
     AllowedValues:
+      - db.r5.large
+      - db.r5.xlarge
+      - db.r5.2xlarge
+      - db.r5.4xlarge
+      - db.r5.12xlarge
       - db.r4.large
       - db.r4.xlarge
+      - db.r4.2xlarge
+      - db.r4.4xlarge
+      - db.r4.8xlarge
     ConstraintDescription: Must be a valid Amazon RDS instance type.
+
 Conditions: 
-  Create-SQLServer-to-AuroraMySQL-Environment: !Equals [ !Ref MigrationType, 'Microsoft SQL Server to Amazon Aurora (MySQL)' ]
-  Create-Oracle-to-AuroraPostgreSQL-Environment: !Equals [ !Ref MigrationType, 'Oracle to Amazon Aurora (PostgreSQL)' ]
-  Create-Oracle-Environment: !Or [!Equals [ !Ref MigrationType, 'Oracle to Amazon Aurora (PostgreSQL)'], !Equals [ !Ref MigrationType, 'Oracle to Amazon RDS Oracle'] ] 
+  Create-SQLServer-to-AuroraMySQL-Environment: !Equals [ !Ref LabType, 'Microsoft SQL Server to Amazon Aurora (MySQL)' ]
+  Create-Oracle-to-AuroraPostgreSQL-Environment: !Equals [ !Ref LabType, 'Oracle to Amazon Aurora (PostgreSQL)' ]
+  Create-Oracle-Environment: !Or [!Equals [ !Ref LabType, 'Oracle to Amazon Aurora (PostgreSQL)'], !Equals [ !Ref LabType, 'Oracle to Amazon RDS Oracle'] ] 
+
 Resources:
   DmsVpc:
     Type: AWS::EC2::VPC
@@ -313,14 +279,14 @@ Resources:
       - DeviceName: "/dev/sda1"
         Ebs:
           DeleteOnTermination: 'true'
-          Iops: '5000'
+          Iops: '2000'
           VolumeSize: '250'
           VolumeType: io1
       ImageId: 
         Fn::FindInMap:
         - RegionMap
         - !Ref AWS::Region
-        - DMSAMI
+        - EC2AMI
       NetworkInterfaces:
       - AssociatePublicIpAddress: 'true'
         DeleteOnTermination: 'true'
@@ -378,16 +344,13 @@ Resources:
           - - Ref: AWS::StackName
             - SourceOracleDB  
       DBName: 'OracleDB'
-      AllocatedStorage: 100
+      AllocatedStorage: '100'
+      StorageType: gp2
       MasterUsername: 'dbmaster'
       MasterUserPassword: 'dbmaster123'
-      DBInstanceClass: 'db.r5.2xlarge'
+      DBInstanceClass: !Ref RDSInstanceType
       Engine: oracle-ee
-      EngineVersion: 
-        Fn::FindInMap:
-          - OracleEngineVersion
-          - !Ref AWS::Region
-          - ver
+      EngineVersion: '12.1.0.2.v6'
       LicenseModel: bring-your-own-license
       PubliclyAccessible: false
       AvailabilityZone: 
@@ -403,10 +366,9 @@ Resources:
           - GroupId
       DBSnapshotIdentifier: 
         Fn::FindInMap: 
-          - OracleSnapshotId
+          - RegionMap
           - !Ref AWS::Region
-          - snapid
-      StorageType: gp2
+          - OracleSnapshotId
       DBInstanceIdentifier:
         Fn::Join:
         - "-"
@@ -582,6 +544,7 @@ Resources:
       EngineVersion: 5.6.10a
       LicenseModel: general-public-license
       PubliclyAccessible: 'false'
+
 Outputs:
   SourceEC2PublicDNS:
     Description: Public DNS enpoint for the EC2 instance

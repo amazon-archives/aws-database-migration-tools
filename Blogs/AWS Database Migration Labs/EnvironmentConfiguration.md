@@ -1,6 +1,6 @@
 # Environment Configuration
 
-This section describes the steps to provision the AWS resources that are required for this database migraiton walkthrough. We use [AWS CloudFormation][cfn] to create a network topology that includes a simple [Amazon Virtual Privsate Cloud (Amazon VPC)][vpc] with 3 public subnets to deploy the [AWS Database Migration Service (AWS DMS)][aws-dms] replicaiton instnaces, as well as [Amazon Relational Database Service (Amazon RDS)][rds] instance for the target database. Additionally, it provisions an [Amazon Elastic Compute Cloud (EC2)][ec2] instance to host the tools that we use in this migration like the [AWS Schema Conversion Tool (AWS SCT)][aws-sct]. AWS CloudFormation simples provisioning the infrastructure, so we can concentrate on tasks related to data migration.
+This section describes the steps to provision the AWS resources that are required for this database migration walkthrough. We use [AWS CloudFormation][cfn] to create a network topology that includes a simple [Amazon Virtual Privsate Cloud (Amazon VPC)][vpc] with 3 public subnets to deploy the [AWS Database Migration Service (AWS DMS)][aws-dms] replicaiton instnaces, as well as [Amazon Relational Database Service (Amazon RDS)][rds] instance for the target database. Additionally, it provisions an [Amazon Elastic Compute Cloud (EC2)][ec2] instance to host the tools that we use in this migration like the [AWS Schema Conversion Tool (AWS SCT)][aws-sct]. AWS CloudFormation simples provisioning the infrastructure, so we can concentrate on tasks related to data migration.
 
 After you have completed the migration, you can refer to the [Environment Cleanup][env-cleanup] guide to delete the resources in your account to stop incurring additional costs. 
 
@@ -42,7 +42,7 @@ We will use the AWS Management Console to provision the AWS DMS resources, such 
 # Getting Started
 1. Login to [AWS Management Consol][console] using your credentials. 
 
-2.	Click on the drop-down menu on the top right corner of the screen, and select one of the 12 supported regions for this tutorial:
+2.	Click on the drop-down menu on the top right corner of the screen, and select one of the 10 supported regions for this tutorial:
 
 | **Region Name** | **Region** |
 | ------ | ------ |
@@ -53,7 +53,6 @@ We will use the AWS Management Console to provision the AWS DMS resources, such 
 | EU (Ireland) | eu-west-1 |
 | EU (London) | eu-west-2 |
 | EU (Paris) | eu-west-3 |
-| Asia Pacific (Mumbai) | ap-south-1 |
 | Asia Pacific (Tokyo) | ap-northeast-1 |
 | Asia Pacific (Seoul) | ap-northeast-2 |
 | Asia Pacific (Singapore) | ap-southeast-1 |
@@ -114,7 +113,7 @@ In this step, you will use a CloudFormation (CFN) template to deploy the infrast
 11.	Once CloudFormation status changes to **CREATE_COMPLETE**, go to the **Outputs** section.
 
 12.	Make a note of the **Output** values from the CloudFormation environment that you launched as you will need them for the remainder of the tutorial:
-    - Microsoft SQL Server to Amazon Aurora (MySQL) migraiton output
+    - Microsoft SQL Server to Amazon Aurora (MySQL) migration output
     
     ![\[sqlserver-outputs\]](img/EnvConfig09.png)
     
