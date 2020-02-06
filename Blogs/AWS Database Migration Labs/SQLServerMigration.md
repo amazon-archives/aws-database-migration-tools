@@ -123,7 +123,7 @@ Generally, packages, procedures, and functions are more likely to have some issu
 | **Password** | Password1 |
 | **Use SSL** | Unchecked |
 | **Store Password** | Checked |
-| **MySQL Driver Path** | **Path to SQL Server JDBC driver on the EC2 instance that you downloaded from https://dev.mysql.com/downloads/connector/j/** |
+| **MySQL Driver Path** | **Path to MySQL JDBC driver on the EC2 instance that you downloaded from https://dev.mysql.com/downloads/connector/j/** |
 
 ![\[SqlSct10\]](img/SqlSct10.png)
 
@@ -515,7 +515,7 @@ You can follow the same steps to migrate SQL Server and Oracle workloads to othe
 
 [ec2-console]: <http://amzn.to/2atGc3r>
 [dms-console]: https://console.aws.amazon.com/dms/
-[env-config]: </EnvironmentConfiguration.md>
+[env-config]: <https://github.com/awslabs/aws-database-migration-tools/blob/master/Blogs/AWS%20Database%20Migration%20Labs/EnvironmentConfiguration.md>
 [aws-sct]: <https://aws.amazon.com/dms/schema-conversion-tool/?nc=sn&loc=2>
 [aws-dms]: <https://aws.amazon.com/dms/>
 [aurora]: <https://aws.amazon.com/rds/aurora/>

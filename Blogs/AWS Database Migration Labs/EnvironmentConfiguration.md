@@ -72,13 +72,13 @@ In this step, you will generate an EC2 key pair that you will use to connect to 
 ![\[create-keypair2\]](img/EnvConfig03.png)
 
 # Environment Configuration
-In this step, you will use a CloudFormation (CFN) template to deploy the infrastructure for this database migration. You can download the CFN template [here][cfn-template].
+In this step, you will use a CloudFormation (CFN) template to deploy the infrastructure for this database migration. Download the [DatabaseMigration_CFN_Template.yaml][cfn-template].
 
 5. Open the CloudFormation console, and click on **Create Stack** in the left-hand corner.
 
 ![\[create-stack\]](img/EnvConfig04.png)
 
-6. Select Template is ready, and choose Upload a template file as the source template. Then, click on Choose file and upload the [DatabaseMigration_CFN_Template.yaml][cfn-template]. Click Next.
+6. Select Template is ready, and choose Upload a template file as the source template. Then, click on Choose file and upload the template that you downloded earlier. Click Next.
 
 ![\[add-template\]](img/EnvConfig05.png)
 
@@ -136,5 +136,5 @@ You have completed the configuration of your environment. Please make sure that 
 [download-sct]: <https://docs.aws.amazon.com/SchemaConversionTool/latest/userguide/CHAP_Installing.html>
 [cfn]: <https://aws.amazon.com/cloudformation/>
 [rds]: <https://aws.amazon.com/rds/>
-[cfn-template]: </DatabaseMigration_CFN_Template.yaml>
+[cfn-template]: <https://github.com/awslabs/aws-database-migration-tools/blob/master/Blogs/AWS%20Database%20Migration%20Labs/DatabaseMigration_CFN_Template.yaml>
 [key-pair]: <http://amzn.to/2kcoMQp>

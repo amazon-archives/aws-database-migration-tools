@@ -560,7 +560,7 @@ Note that baseball, and football are the only two sports that are currently list
 
 30. Expand the **Table mappings** section, and select **Guided UI** for the editing mode.
 
-31.	Add the same **Selection**, and **Transformation** rules as specified in steps 28, and 29.
+31.	Add the same **Selection**, and **Transformation** rules as specified in steps 19 to 21.
 
 ![\[OracleDms22\]](img/OracleDms22.png)
 
@@ -615,7 +615,7 @@ You can follow the same steps to migrate SQL Server and Oracle workloads to othe
 
 [ec2-console]: <http://amzn.to/2atGc3r>
 [dms-console]: https://console.aws.amazon.com/dms/
-[env-config]: </EnvironmentConfiguration.md>
+[env-config]: <https://github.com/awslabs/aws-database-migration-tools/blob/master/Blogs/AWS%20Database%20Migration%20Labs/EnvironmentConfiguration.md>
 [aws-sct]: <https://aws.amazon.com/dms/schema-conversion-tool/?nc=sn&loc=2>
 [aws-dms]: <https://aws.amazon.com/dms/>
 [aurora]: <https://aws.amazon.com/rds/aurora/>
