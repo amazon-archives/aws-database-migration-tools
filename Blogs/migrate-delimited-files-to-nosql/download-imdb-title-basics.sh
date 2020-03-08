@@ -8,7 +8,7 @@ mkdir -p tempimdbfiles
 cd tempimdbfiles
 # currently the loop is only looking for one file.
 # You can change the --prefix value to look for a group of files or all the files
-for DOCUMENT in `aws s3api list-objects --bucket imdb-datasets --prefix "documents/v1/current/title.basics.tsv.gz" --request-payer requester --profile $AWSPROFILE | jq -r .Contents[].Key`; do
+for DOCUMENT in `aws s3api list-objects --output json --bucket imdb-datasets --prefix "documents/v1/current/title.basics.tsv.gz" --request-payer requester --profile $AWSPROFILE | jq -r .Contents[].Key`; do
     echo "     downloading $DOCUMENT"
     FILENAME="$(echo $DOCUMENT | sed 's|documents/v1/current/||g')"
     echo " saving to file $FILENAME"
