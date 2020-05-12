@@ -26,7 +26,7 @@ Details about the files in this repo:
 
 Design:
 
-![GitHub Logo](/images/migrationresourcesTemplate.png)
+![migration resources Template](./images/migrationresourcesTemplate.png)
 
 
 ## glueblog.template
@@ -34,11 +34,11 @@ Design:
  1. AWS Glue RDS Amazon Aurora MySQL JDBC connection
  1. AWS Glue database named hrdb
  1. AWS Glue crawler 
- 1. AWS Glue ETL Job - The job uses PySpark [blogetl.py] script stored in a s3 bucket for ETL in the job.
+ 1. AWS Glue ETL Job - The job uses a [PySpark script](./blogetl.py)  stored in a s3 bucket for ETL in the job.
 
 Design:
 
-![GitHub Logo](/images/glueblogTemplate.png)
+![glue blog Template](./images/glueblogTemplate.png)
 
 ## oracle-aurora-postgresql-deployment.template
 This template deploys a stack consisting of:
@@ -60,7 +60,7 @@ This template deploys a stack consisting of:
  1. Replication Instance
 
 Design:
-![GitHub Logo](/images/oracle-aurora-postgresql-deployment-designer.png)
+![oracle-aurora-postgresql-deployment-designer](./images/oracle-aurora-postgresql-deployment-designer.png)
 
 ## blogetl.py
  Script that does an inner join of EMPLOYEES and DEPARTMENTS tables in HRDATA database and writes the results of the join a new table called EMPLOYEES_DEPARTMENTS in RDS Amazon Aurora MySQL database.	   
